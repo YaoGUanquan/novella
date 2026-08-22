@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "documents": [
+    {
+      "id": "project-context",
+      "path": "docs/08-ai-memory/01-project-context.md",
+      "kind": "memory",
+      "role": "project identity, stack, and entry points",
+      "topics": ["project", "stack", "entry-points"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "architecture-boundaries",
+      "path": "docs/08-ai-memory/02-architecture-boundaries.md",
+      "kind": "memory",
+      "role": "dependency and integration boundaries",
+      "topics": ["architecture", "boundaries", "security"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "key-workflows",
+      "path": "docs/08-ai-memory/03-key-workflows.md",
+      "kind": "memory",
+      "role": "provider and video integration workflows",
+      "topics": ["workflow", "ai-provider", "video-generation"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "known-pitfalls",
+      "path": "docs/08-ai-memory/04-known-pitfalls.md",
+      "kind": "memory",
+      "role": "encoding, compatibility, and external service risks",
+      "topics": ["pitfalls", "encoding", "external-services"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "decision-log",
+      "path": "docs/08-ai-memory/05-decision-log.md",
+      "kind": "memory",
+      "role": "durable project decisions",
+      "topics": ["decisions", "scope", "evidence"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "project-creation-ai-context",
+      "path": "docs/08-ai-memory/07-project-creation-ai-context.md",
+      "kind": "memory",
+      "role": "project creation metadata and AI inspiration contract",
+      "topics": ["project-creation", "sse", "creative-context", "fallback"],
+      "reviewStatus": "current"
+    },
+    {
+      "id": "creative-assistant",
+      "path": "docs/08-ai-memory/08-creative-assistant.md",
+      "kind": "memory",
+      "role": "creative assistant sidebar, skills, and character backfill",
+      "topics": ["creative-assistant", "skills", "backfill", "memory"],
+      "reviewStatus": "current"
+    }
+  ],
+  "relations": [
+    {
+      "from": "project-context",
+      "to": "AGENTS.md",
+      "type": "governs",
+      "evidence": {
+        "path": "AGENTS.md",
+        "note": "Project-level instructions define paths, encoding, and validation rules."
+      }
+    },
+    {
+      "from": "architecture-boundaries",
+      "to": "docs/ae/graphs/architecture-graph.md",
+      "type": "documents",
+      "evidence": {
+        "path": "docs/ae/graphs/architecture-graph.md",
+        "note": "Mermaid graph records the static module and runtime boundaries."
+      }
+    },
+    {
+      "from": "key-workflows",
+      "to": "docs/ae/evidence/initial-scan.md",
+      "type": "supports",
+      "evidence": {
+        "path": "docs/ae/evidence/initial-scan.md",
+        "note": "The scan report records the provider, video, Tauri, and pipeline call paths."
+      }
+    },
+    {
+      "from": "known-pitfalls",
+      "to": "docs/ae/evidence/initial-scan.md",
+      "type": "references",
+      "evidence": {
+        "path": "docs/ae/evidence/initial-scan.md",
+        "note": "The external documentation comparison records verified and unverified claims."
+      }
+    },
+    {
+      "from": "decision-log",
+      "to": "docs/ae/evidence/initial-scan.md",
+      "type": "records",
+      "evidence": {
+        "path": "docs/ae/evidence/initial-scan.md",
+        "note": "Scope and evidence decisions are grounded in the baseline scan."
+      }
+    },
+    {
+      "from": "creative-assistant",
+      "to": "docs/developer-guide/creative-assistant.md",
+      "type": "documents",
+      "evidence": {
+        "path": "docs/developer-guide/creative-assistant.md",
+        "note": "Developer-facing call chain and backfill contract for the sidebar assistant."
+      }
+    },
+    {
+      "from": "architecture-boundaries",
+      "to": "docs/developer-guide/service-connections.md",
+      "type": "documents",
+      "evidence": {
+        "path": "docs/developer-guide/service-connections.md",
+        "note": "Three settings surfaces and configured dialogue/image/video routing."
+      }
+    }
+  ]
+}

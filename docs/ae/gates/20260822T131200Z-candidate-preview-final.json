@@ -1,0 +1,15 @@
+{
+  "id": "20260822T131200Z-candidate-preview-final",
+  "status": "pass-with-unverified",
+  "task": "creative-assistant-candidate-preview",
+  "requirements": "docs/ae/prds/creative-assistant-candidate-preview-2026-08-22.md",
+  "plan": "docs/ae/plans/creative-assistant-candidate-preview-2026-08-22.md",
+  "documentReview": "approve-no-blockers",
+  "codeReview": "comment-no-blockers",
+  "validation": {
+    "command": "corepack pnpm test -- src/__tests__/features/creative-assistant",
+    "result": "4 suites / 35 passed"
+  },
+  "unverified": ["browser-acceptance"],
+  "git": "none"
+}

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "20260822T094438288Z-fa4518fc6b93",
+  "evidenceKind": "review-contract",
+  "payload": {
+    "kind": "document",
+    "mode": "report-only",
+    "reviewers": ["coherence-reviewer", "feasibility-reviewer"],
+    "targetCoverage": {
+      "docs/ae/prds/configured-dialogue-transport-and-initialization-2026-08-22.md": {
+        "status": "uncovered",
+        "reviewers": []
+      },
+      "docs/ae/plans/configured-dialogue-transport-and-initialization-2026-08-22.md": {
+        "status": "uncovered",
+        "reviewers": []
+      }
+    },
+    "inputs": {
+      "kind": "document",
+      "mode": "report-only",
+      "targets": "docs/ae/prds/configured-dialogue-transport-and-initialization-2026-08-22.md,docs/ae/plans/configured-dialogue-transport-and-initialization-2026-08-22.md",
+      "write-evidence": true
+    }
+  },
+  "timestamps": {
+    "writtenAt": "2026-08-22T09:44:38.292Z"
+  },
+  "git": {
+    "available": true,
+    "head": "89eeb80d3dd903d887a121a43661ca9dab490fb2",
+    "branch": "develop",
+    "statusHash": "3f4f7b65529dd344335ce48db6162decac2b020732c20c5c89fdd35422ef6025",
+    "dirty": true
+  },
+  "hashes": {
+    "previousRecordHash": "b8569af7b570871926cbb8cc442d86d4da5bfb826c8d51bc584e4de4308b0dec",
+    "payloadHash": "fa4518fc6b93deca00a1c1926f55e0918f934f0eaf90f35586209920093fe2b7",
+    "recordHash": "bec4515c3c5c53eb706659f1add4c066be7feaf76326161451a8c1cc82e90abd"
+  }
+}

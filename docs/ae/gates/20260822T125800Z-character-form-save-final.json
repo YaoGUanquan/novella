@@ -1,0 +1,15 @@
+{
+  "id": "20260822T125800Z-character-form-save-final",
+  "status": "pass-with-unverified",
+  "task": "creative-assistant-character-form-save",
+  "requirements": "docs/ae/prds/creative-assistant-character-form-save-2026-08-22.md",
+  "plan": "docs/ae/plans/creative-assistant-character-form-save-2026-08-22.md",
+  "documentReview": "approve-no-blockers",
+  "codeReview": "comment-no-blockers",
+  "validation": {
+    "command": "corepack pnpm test -- src/__tests__/features/creative-assistant src/__tests__/pages/parse-character-drafts.test.ts src/__tests__/services/assistant-skills.test.ts",
+    "result": "39 passed"
+  },
+  "unverified": ["browser-acceptance", "authenticated-model-smoke"],
+  "git": "none"
+}

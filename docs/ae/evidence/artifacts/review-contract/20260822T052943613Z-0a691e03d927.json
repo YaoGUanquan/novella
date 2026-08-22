@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "20260822T052943613Z-0a691e03d927",
+  "evidenceKind": "review-contract",
+  "payload": {
+    "kind": "document",
+    "mode": "report-only",
+    "reviewers": [
+      "coherence-reviewer",
+      "feasibility-reviewer",
+      "requirements-reviewer",
+      "step-granularity-reviewer",
+      "product-lens-reviewer"
+    ],
+    "targetCoverage": {
+      "requirements": {
+        "status": "covered",
+        "reviewers": ["requirements-reviewer"]
+      },
+      "plan": {
+        "status": "covered",
+        "reviewers": ["step-granularity-reviewer", "product-lens-reviewer"]
+      }
+    },
+    "inputs": {
+      "kind": "document",
+      "mode": "report-only",
+      "targets": "requirements,plan",
+      "write-evidence": true
+    }
+  },
+  "timestamps": {
+    "writtenAt": "2026-08-22T05:29:43.617Z"
+  },
+  "git": {
+    "available": true,
+    "head": "89eeb80d3dd903d887a121a43661ca9dab490fb2",
+    "branch": "develop",
+    "statusHash": "31a59ee9a3e2013b80cfb3f745b021ff6c3cb750c24f5663d2504c5dc7c0d8f3",
+    "dirty": true
+  },
+  "hashes": {
+    "previousRecordHash": null,
+    "payloadHash": "0a691e03d927e17b4cb2a30a45e544aed447002778c5a8aec7d087caef20ea71",
+    "recordHash": "de3cecd0781d24d59aaa24a26975290821fbefbf49f513bca8a194a03ec9e376"
+  }
+}

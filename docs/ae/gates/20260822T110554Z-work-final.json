@@ -1,0 +1,15 @@
+{
+  "workflow": "work",
+  "checkpoint": "final",
+  "status": "pass",
+  "worktree": "D:\\codes\\ph-novella",
+  "plan_path": "docs/ae/plans/native-dialogue-transport-and-recovery-2026-08-22.md",
+  "validation_commands": ["cargo check --workspace; jest 16/16; pnpm tauri dev started"],
+  "review_status": "comment",
+  "worktree_decision": "rejected",
+  "git_operations": [],
+  "blockers": [],
+  "warnings": [],
+  "notes": null,
+  "generated_at": "2026-08-22T11:05:54.823Z"
+}

@@ -36,6 +36,8 @@ export class AnthropicStrategy extends BaseAIProviderStrategy { ... }
 
 ## Fallback Chain
 
+对话模型调用必须走 dispatcher，不要从页面 `fetch` 第三方聊天 API。创作助手侧栏的调用链与回填合同见 [创作助手](./creative-assistant)。
+
 ```typescript
 // 主 Provider 失败 → 自动切换下一个
 const dispatcher = new AICallDispatcher(providerRegistry);

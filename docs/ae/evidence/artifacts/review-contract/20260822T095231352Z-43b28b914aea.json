@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "20260822T095231352Z-43b28b914aea",
+  "evidenceKind": "review-contract",
+  "payload": {
+    "kind": "code",
+    "mode": "report-only",
+    "reviewers": [
+      "correctness-reviewer",
+      "testing-reviewer",
+      "standards-reviewer",
+      "maintainability-reviewer"
+    ],
+    "targetCoverage": {
+      "src/core/services/ai/text/ai-service.ts": {
+        "status": "uncovered",
+        "reviewers": []
+      },
+      "src/features/creative-assistant/components/AICreativeAssistantSheet.tsx": {
+        "status": "uncovered",
+        "reviewers": []
+      },
+      "src/__tests__/services/configured-dialogue-stream.test.ts": {
+        "status": "uncovered",
+        "reviewers": []
+      },
+      "src/__tests__/features/creative-assistant/AICreativeAssistantSheet.test.tsx": {
+        "status": "uncovered",
+        "reviewers": []
+      },
+      "src-tauri/tauri.conf.json": {
+        "status": "uncovered",
+        "reviewers": []
+      }
+    },
+    "inputs": {
+      "kind": "code",
+      "mode": "report-only",
+      "targets": "src/core/services/ai/text/ai-service.ts,src/features/creative-assistant/components/AICreativeAssistantSheet.tsx,src/__tests__/services/configured-dialogue-stream.test.ts,src/__tests__/features/creative-assistant/AICreativeAssistantSheet.test.tsx,src-tauri/tauri.conf.json",
+      "write-evidence": true
+    }
+  },
+  "timestamps": {
+    "writtenAt": "2026-08-22T09:52:31.355Z"
+  },
+  "git": {
+    "available": true,
+    "head": "89eeb80d3dd903d887a121a43661ca9dab490fb2",
+    "branch": "develop",
+    "statusHash": "82e75b880487a60c57ac4b40704f899c492278650ec1e884b7fcdcc03caa6cad",
+    "dirty": true
+  },
+  "hashes": {
+    "previousRecordHash": "bec4515c3c5c53eb706659f1add4c066be7feaf76326161451a8c1cc82e90abd",
+    "payloadHash": "43b28b914aea3f0a3bce9d00a0840fdccdd03a3612d098e5798a39b2462278d6",
+    "recordHash": "d71e66cae6f87f8f8ed564af805bc3b6d84616e4adbdf09a6816054e9a3b21c0"
+  }
+}

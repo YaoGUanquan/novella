@@ -21,6 +21,8 @@ src/
 
 ## 层级边界（ESLint 强制）
 
+当前源码树以 `AGENTS.md` 为准：`app/pages` → `components/features` → `core` → `shared`；`features/project` 可适配 AI 创建弹窗，`shared` 的 `CreateProjectModal` 不得导入 `core/services`。下方旧目录树是历史文档，不能替代 `src/`。
+
 | 层             | 禁止导入      |
 | -------------- | ------------- |
 | `components/`  | `services/`   |

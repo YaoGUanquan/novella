@@ -45,6 +45,13 @@ if (isTauri()) {
 }
 ```
 
+## 对话传输双模式
+
+- Web：`pnpm dev` 走 Provider 直连，或显式开启受限 Vite 代理（见 [服务连接](./service-connections)）。
+- 桌面：`pnpm tauri dev` 走 `src-tauri/src/commands/dialogue.rs` 的 HTTPS SSE，前端订阅 `novella://dialogue/*`。不要用浏览器打开开发服务器地址代替 Tauri 窗口验收。
+
+`tauri.conf.json` 的 CSP `connect-src` 含 `https:`，设置里保存的自定义 HTTPS 对话地址才能连通。API key 只进入 native 请求内存，不进 IPC 事件或日志。
+
 ## FFmpeg 双模式
 
 桌面端优先使用系统 FFmpeg（原生性能），缺失时自动降级到 FFmpeg.wasm。

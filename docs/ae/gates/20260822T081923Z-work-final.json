@@ -1,0 +1,17 @@
+{
+  "workflow": "work",
+  "checkpoint": "final",
+  "status": "pass",
+  "worktree": "D:\\codes\\ph-novella",
+  "plan_path": "docs/ae/plans/ai-assisted-creative-and-video-materials-2026-08-22.md",
+  "validation_commands": [
+    "pnpm test -- --runInBand src/__tests__/services/anthropic-stream.test.ts src/__tests__/services/remote-video-service.test.ts src/__tests__/services/configured-generation-routing.test.ts; pnpm exec tsc --noEmit; pnpm run build"
+  ],
+  "review_status": "approve",
+  "worktree_decision": "continued_on_existing_develop_dirty_worktree",
+  "git_operations": [],
+  "blockers": [],
+  "warnings": [],
+  "notes": null,
+  "generated_at": "2026-08-22T08:19:23.596Z"
+}
