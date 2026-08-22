@@ -4,7 +4,7 @@
  */
 
 import { Plus, Trash2, Save, Wand2 } from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { logger } from '@/core/utils/logger';
 import { Button } from '@/shared/components/ui/button';
@@ -31,6 +31,12 @@ import {
 import type { CharacterAppearance, ClothingItem } from '@/shared/types/composition';
 import type { Character } from '@/shared/types/novel';
 import { generateCharId } from '@/shared/utils';
+
+import {
+  appearanceColorSwatch,
+  isBodyTypeSelectValue,
+  isHeightSelectValue,
+} from '../appearance-form';
 
 import styles from './CharacterDesigner.module.less';
 
@@ -95,6 +101,23 @@ const CLOTHING_TYPES = [
   { value: 'accessory', label: '配饰' },
 ] as const;
 
+function mergeDraftAppearance(source: Character | undefined): CharacterAppearance {
+  const appearance = source?.appearance;
+  const features = [...new Set([...(appearance?.features ?? []), ...(source?.features ?? [])])];
+  return {
+    hairColor: appearance?.hairColor ?? source?.hairColor ?? '#000000',
+    eyeColor: appearance?.eyeColor ?? source?.eyeColor ?? '#000000',
+    skinTone: appearance?.skinTone ?? source?.skinTone ?? '#F5D6BA',
+    height: appearance?.height ?? source?.height ?? 'average',
+    bodyType: appearance?.bodyType ?? source?.bodyType,
+    hairStyle: appearance?.hairStyle ?? source?.hairStyle,
+    gender: appearance?.gender ?? source?.gender,
+    age: appearance?.age ?? source?.age,
+    weight: appearance?.weight ?? source?.weight,
+    features: features.length > 0 ? features : appearance?.features,
+  };
+}
+
 export interface CharacterDesignerProps {
   character?: Character;
   characters?: Character[];
@@ -110,7 +133,7 @@ export interface CharacterDesignerProps {
  */
 export function CharacterDesigner({
   character,
-  characters: _characters,
+  characters,
   onChange: _onChange,
   projectId: _projectId,
   onSave,
@@ -125,14 +148,63 @@ export function CharacterDesigner({
   const [age, setAge] = useState(character?.age ?? '');
   const [personality, setPersonality] = useState(character?.personality ?? '');
   const [appearance, setAppearance] = useState<CharacterAppearance>(
-    character?.appearance ?? {
-      hairColor: '#000000',
-      eyeColor: '#000000',
-      skinTone: '#F5D6BA',
-      height: 'average',
-    }
+    mergeDraftAppearance(character)
   );
   const [clothing, setClothing] = useState<ClothingItem[]>(character?.clothing ?? []);
+  const skipDraftEmitRef = useRef(true);
+  const source = characters?.[0] ?? character;
+
+  useEffect(() => {
+    if (!source) return;
+    skipDraftEmitRef.current = true;
+    setName(source.name ?? '');
+    setDescription(source.description ?? '');
+    setRole(source.role ?? 'protagonist');
+    setGender(source.gender ?? 'male');
+    setAge(source.age ?? '');
+    setPersonality(source.personality ?? '');
+    setAppearance(mergeDraftAppearance(source));
+    setClothing(source.clothing ?? []);
+  }, [source?.id]);
+
+  useEffect(() => {
+    if (skipDraftEmitRef.current) {
+      skipDraftEmitRef.current = false;
+      return;
+    }
+    if (!_onChange || !name.trim()) return;
+    _onChange([
+      {
+        id: source?.id ?? generateCharId(),
+        name: name.trim(),
+        description: description.trim(),
+        role,
+        gender,
+        age,
+        personality,
+        appearance,
+        clothing,
+        background: source?.background,
+        features: source?.features,
+        createdAt: source?.createdAt ?? new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+  }, [
+    _onChange,
+    age,
+    appearance,
+    clothing,
+    description,
+    gender,
+    name,
+    personality,
+    role,
+    source?.background,
+    source?.createdAt,
+    source?.features,
+    source?.id,
+  ]);
 
   // 更新外观属性
   const updateAppearance = useCallback(
@@ -305,14 +377,14 @@ export function CharacterDesigner({
                     <Input
                       id="hairColor"
                       type="color"
-                      value={appearance.hairColor ?? '#000000'}
+                      value={appearanceColorSwatch(appearance.hairColor, '#000000')}
                       onChange={(e) => updateAppearance('hairColor', e.target.value)}
                       className="w-12 h-10 p-1"
                     />
                     <Input
-                      value={appearance.hairColor ?? '#000000'}
+                      value={appearance.hairColor ?? ''}
                       onChange={(e) => updateAppearance('hairColor', e.target.value)}
-                      placeholder="#000000"
+                      placeholder="黑色 或 #000000"
                     />
                   </div>
                 </div>
@@ -322,14 +394,14 @@ export function CharacterDesigner({
                     <Input
                       id="eyeColor"
                       type="color"
-                      value={appearance.eyeColor ?? '#000000'}
+                      value={appearanceColorSwatch(appearance.eyeColor, '#000000')}
                       onChange={(e) => updateAppearance('eyeColor', e.target.value)}
                       className="w-12 h-10 p-1"
                     />
                     <Input
-                      value={appearance.eyeColor ?? '#000000'}
+                      value={appearance.eyeColor ?? ''}
                       onChange={(e) => updateAppearance('eyeColor', e.target.value)}
-                      placeholder="#000000"
+                      placeholder="黑褐色 或 #3B2F2F"
                     />
                   </div>
                 </div>
@@ -339,14 +411,14 @@ export function CharacterDesigner({
                     <Input
                       id="skinTone"
                       type="color"
-                      value={appearance.skinTone ?? '#F5D6BA'}
+                      value={appearanceColorSwatch(appearance.skinTone, '#F5D6BA')}
                       onChange={(e) => updateAppearance('skinTone', e.target.value)}
                       className="w-12 h-10 p-1"
                     />
                     <Input
-                      value={appearance.skinTone ?? '#F5D6BA'}
+                      value={appearance.skinTone ?? ''}
                       onChange={(e) => updateAppearance('skinTone', e.target.value)}
-                      placeholder="#F5D6BA"
+                      placeholder="白皙 或 #F5D6BA"
                     />
                   </div>
                 </div>
@@ -355,36 +427,54 @@ export function CharacterDesigner({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="height">身高</Label>
-                  <Select
-                    value={String(appearance.height ?? 'average')}
-                    onValueChange={(value) => updateAppearance('height', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="short">矮</SelectItem>
-                      <SelectItem value="average">中等</SelectItem>
-                      <SelectItem value="tall">高</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isHeightSelectValue(String(appearance.height ?? '')) ? (
+                    <Select
+                      value={String(appearance.height)}
+                      onValueChange={(value) => updateAppearance('height', value)}
+                    >
+                      <SelectTrigger id="height">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="short">矮</SelectItem>
+                        <SelectItem value="average">中等</SelectItem>
+                        <SelectItem value="tall">高</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="height"
+                      value={appearance.height == null ? '' : String(appearance.height)}
+                      onChange={(e) => updateAppearance('height', e.target.value)}
+                      placeholder="如 175"
+                    />
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bodyType">体型</Label>
-                  <Select
-                    value={appearance.bodyType ?? 'average'}
-                    onValueChange={(value) => updateAppearance('bodyType', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="slim">纤细</SelectItem>
-                      <SelectItem value="average">中等</SelectItem>
-                      <SelectItem value="athletic">健壮</SelectItem>
-                      <SelectItem value="heavy">丰满</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {isBodyTypeSelectValue(appearance.bodyType) ? (
+                    <Select
+                      value={appearance.bodyType}
+                      onValueChange={(value) => updateAppearance('bodyType', value)}
+                    >
+                      <SelectTrigger id="bodyType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slim">纤细</SelectItem>
+                        <SelectItem value="average">中等</SelectItem>
+                        <SelectItem value="athletic">健壮</SelectItem>
+                        <SelectItem value="heavy">丰满</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="bodyType"
+                      value={appearance.bodyType ?? ''}
+                      onChange={(e) => updateAppearance('bodyType', e.target.value)}
+                      placeholder="如 偏瘦"
+                    />
+                  )}
                 </div>
               </div>
 
