@@ -1,0 +1,1264 @@
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  Copy,
+  ImagePlus,
+  MessageCircleMore,
+  Plus,
+  RotateCcw,
+  Send,
+  Square,
+  Trash2,
+  WandSparkles,
+  X,
+} from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { toast } from '@/components/ui/toast';
+import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
+import type { AIRequestConfig } from '@/core/ai/types/ai-core';
+import { aiService } from '@/core/services';
+import {
+  assistantSkillRegistry,
+  PRODUCT_ASSISTANT_SKILL_IDS,
+  type AssistantSkillId,
+  type CatalogAssistantSkillId,
+} from '@/core/services/ai/assistant-skills';
+import { ConfiguredDialogueError } from '@/core/services/ai/text/ai-service';
+import { Button } from '@/shared/components/ui/button';
+import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog';
+import { Textarea } from '@/shared/components/ui/textarea';
+
+import { createAgentTimeline, failRunningAgentSteps, finishAgentTimeline } from '../agent-timeline';
+import { looksLikeStructuredDraft, isSameStructuredDraft } from '../candidate-preview';
+import {
+  buildCreativeAssistantSystemPrompt,
+  clearCreativeAssistantMemory,
+  EMPTY_CREATIVE_ASSISTANT_MEMORY,
+  formatCreativeAssistantMemory,
+  hideCreativeAssistantStateMarker,
+  isCreativeAssistantStateApplied,
+  loadCreativeAssistantMemory,
+  mergeCreativeAssistantMemory,
+  parseCreativeAssistantResponse,
+  saveCreativeAssistantMemory,
+} from '../creative-assistant-memory';
+import {
+  loadCreativeAssistantSession,
+  saveCreativeAssistantSession,
+} from '../creative-assistant-session';
+import type {
+  CreativeAssistantAttachment,
+  CreativeAssistantCandidate,
+  CreativeAssistantMemory,
+  CreativeAssistantMessage,
+  CreativeAssistantState,
+} from '../types';
+
+import { AgentThinkingTrace } from './AgentThinkingTrace';
+import { AssistantMarkdown } from './AssistantMarkdown';
+import { CandidatePreview } from './CandidatePreview';
+
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_ATTACHMENTS = 4;
+const SUPPORTED_IMAGE_TYPES = new Set<CreativeAssistantAttachment['mimeType']>([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+
+export interface AICreativeAssistantSheetProps<T> {
+  projectId?: string;
+  targetLabel: string;
+  projectContext: string;
+  candidateInstructions: string;
+  parseCandidate: (raw: string) => T;
+  onApply: (candidate: T) => void;
+  autoPreviewCandidate?: boolean;
+  onPersist?: () => void | Promise<void>;
+  persistLabel?: string;
+}
+
+function messageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function attachmentId(): string {
+  return `attachment-${messageId()}`;
+}
+
+function AssistantReplyBody({
+  content,
+  live,
+  candidateRaw,
+}: {
+  content: string;
+  live: boolean;
+  candidateRaw: string | null;
+}) {
+  if (!looksLikeStructuredDraft(content)) {
+    return <AssistantMarkdown content={content} />;
+  }
+  if (live) {
+    return <p className="text-sm text-slate-200">正在整理草稿…</p>;
+  }
+  if (candidateRaw && isSameStructuredDraft(content, candidateRaw)) {
+    return <p className="text-sm text-slate-200">草稿已放到下方候选稿，请核对后保存。</p>;
+  }
+  return <CandidatePreview value={content} />;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`无法读取图片：${file.name}`));
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error(`无法读取图片：${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function toRequestMessage(message: CreativeAssistantMessage): AIRequestConfig['messages'][number] {
+  const text = message.content.trim() || '请分析我附上的图片。';
+  if (!message.attachments?.length) return { role: message.role, content: text };
+  return {
+    role: message.role,
+    content: [
+      { type: 'text', text },
+      ...message.attachments.map((attachment) => ({
+        type: 'image_url' as const,
+        image_url: { url: attachment.dataUrl },
+      })),
+    ],
+  };
+}
+
+function compactConversation(messages: CreativeAssistantMessage[]): CreativeAssistantMessage[] {
+  const selected: CreativeAssistantMessage[] = [];
+  let textLength = 0;
+  let imageCount = 0;
+
+  for (const message of [...messages].reverse()) {
+    if (selected.length >= 16 || textLength >= 12000) break;
+    const remainingImages = MAX_ATTACHMENTS - imageCount;
+    const nextAttachments = message.attachments?.slice(0, Math.max(remainingImages, 0));
+    const nextContent = message.content.slice(0, Math.max(12000 - textLength, 0));
+    selected.push({ ...message, content: nextContent, attachments: nextAttachments });
+    textLength += nextContent.length;
+    imageCount += nextAttachments?.length ?? 0;
+  }
+
+  return selected.reverse();
+}
+
+const TRANSCRIPT_NEAR_BOTTOM_PX = 96;
+
+function transcriptViewport(end: HTMLElement | null): HTMLElement | null {
+  const viewport = end?.closest('[data-radix-scroll-area-viewport]');
+  return viewport instanceof HTMLElement ? viewport : null;
+}
+
+function isTranscriptNearBottom(end: HTMLElement | null): boolean {
+  const viewport = transcriptViewport(end);
+  if (!viewport) return true;
+  return (
+    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= TRANSCRIPT_NEAR_BOTTOM_PX
+  );
+}
+
+function scrollTranscriptToLatest(end: HTMLElement | null): void {
+  if (!end) return;
+  const viewport = transcriptViewport(end);
+  if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  end.scrollIntoView({ block: 'end', behavior: 'auto' });
+}
+
+async function* configuredDialogueEvents(
+  requestMessages: AIRequestConfig['messages'],
+  signal?: AbortSignal
+): AsyncGenerator<DialogueStreamEvent> {
+  if (typeof aiService.streamConfiguredDialogueEvents === 'function') {
+    const events = aiService.streamConfiguredDialogueEvents(requestMessages, { signal });
+    if (events && typeof events[Symbol.asyncIterator] === 'function') {
+      yield* events;
+      return;
+    }
+  }
+  for await (const text of aiService.streamConfiguredDialogue(requestMessages, { signal })) {
+    yield { kind: 'text', text };
+  }
+}
+
+function formatAssistantError(error: unknown): string {
+  if (error instanceof ConfiguredDialogueError) {
+    if (error.kind === 'http') {
+      const statusGuidance: Record<number, string> = {
+        401: '密钥无效、缺失或已过期。',
+        403: '当前密钥没有调用该模型的权限。',
+        404: '请求地址或模型 ID 不存在。',
+        429: '服务限流或账户额度不足。',
+      };
+      return `对话服务返回 HTTP ${error.status}。${statusGuidance[error.status ?? 0] ?? '请检查服务状态、请求地址和模型配置。'}`;
+    }
+    return `无法连接到 ${error.host}。请检查网络和请求地址；浏览器模式还需要服务端允许 http://127.0.0.1:1420 跨域访问，桌面端仅支持 HTTPS 自定义地址。`;
+  }
+  const message = error instanceof Error ? error.message : '未知错误';
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return '无法连接到已配置的对话服务。请检查请求地址、网络连接，以及该服务是否允许本地应用访问。';
+  }
+  if (/未配置|已关闭|不支持的对话协议/.test(message)) return message;
+  return `AI 对话失败：${message}`;
+}
+
+export function AICreativeAssistantSheet<T>({
+  projectId,
+  targetLabel,
+  projectContext,
+  candidateInstructions,
+  parseCandidate,
+  onApply,
+  autoPreviewCandidate = false,
+  onPersist,
+  persistLabel = '保存',
+}: AICreativeAssistantSheetProps<T>) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<CreativeAssistantMessage[]>([]);
+  const [attachments, setAttachments] = useState<CreativeAssistantAttachment[]>([]);
+  const [candidate, setCandidate] = useState<CreativeAssistantCandidate<T> | null>(null);
+  const [candidateRaw, setCandidateRaw] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [memory, setMemory] = useState<CreativeAssistantMemory>({
+    ...EMPTY_CREATIVE_ASSISTANT_MEMORY,
+  });
+  const [memoryReady, setMemoryReady] = useState(false);
+  const [conversationVersion, setConversationVersion] = useState(0);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<CatalogAssistantSkillId[]>([]);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const uploadRef = useRef<HTMLInputElement | null>(null);
+  const skillMenuRef = useRef<HTMLDivElement | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const stickToLatestRef = useRef(true);
+  const initializedConversationRef = useRef<string | null>(null);
+  const skipNextInitializationRef = useRef(false);
+  const retryRequestsRef = useRef<
+    Record<
+      string,
+      {
+        requestMessages: AIRequestConfig['messages'];
+        onComplete?: (content: string, state: CreativeAssistantState | null) => void;
+      }
+    >
+  >({});
+  const loadedSessionProjectRef = useRef<string | undefined>(undefined);
+  const loadedMemoryProjectRef = useRef<string | undefined>(undefined);
+  const generateCandidateRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (sessionReady && loadedSessionProjectRef.current === projectId) {
+      saveCreativeAssistantSession(projectId, messages);
+    }
+  }, [messages, projectId, sessionReady]);
+
+  useEffect(() => {
+    const hasMemory = Boolean(
+      memory.intent ||
+      memory.target ||
+      memory.constraints.length ||
+      memory.confirmedFacts.length ||
+      memory.openQuestions.length ||
+      memory.glossary.length
+    );
+    if (memoryReady && loadedMemoryProjectRef.current === projectId && hasMemory) {
+      saveCreativeAssistantMemory(projectId, memory);
+    }
+  }, [memory, memoryReady, projectId]);
+
+  useEffect(() => {
+    setSessionReady(false);
+    setMemoryReady(false);
+    loadedSessionProjectRef.current = projectId;
+    loadedMemoryProjectRef.current = projectId;
+    setMessages(loadCreativeAssistantSession(projectId));
+    setMemory(loadCreativeAssistantMemory(projectId));
+    setCandidate(null);
+    setCandidateRaw(null);
+    setError('');
+    setConversationVersion(0);
+    initializedConversationRef.current = null;
+    setSessionReady(true);
+    setMemoryReady(true);
+  }, [projectId]);
+
+  const scrollToLatest = useCallback(() => {
+    scrollTranscriptToLatest(transcriptEndRef.current);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      stickToLatestRef.current = true;
+      return undefined;
+    }
+    stickToLatestRef.current = true;
+    scrollToLatest();
+    const frame = window.requestAnimationFrame(scrollToLatest);
+    const timers = [80, 320, 520].map((delayMs) => window.setTimeout(scrollToLatest, delayMs));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [open, scrollToLatest]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const last = messages[messages.length - 1];
+    if (last?.role === 'user') stickToLatestRef.current = true;
+    if (!stickToLatestRef.current) return undefined;
+    scrollToLatest();
+    const frame = window.requestAnimationFrame(scrollToLatest);
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, messages, error, candidateRaw, generating, scrollToLatest]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const viewport = transcriptViewport(transcriptEndRef.current);
+    if (!viewport) return undefined;
+    const onScroll = () => {
+      stickToLatestRef.current = isTranscriptNearBottom(transcriptEndRef.current);
+    };
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', onScroll);
+  }, [open]);
+
+  const stopGeneration = () => controllerRef.current?.abort();
+
+  const updateAssistantMessage = useCallback(
+    (id: string, patch: Partial<CreativeAssistantMessage>) => {
+      setMessages((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    },
+    []
+  );
+
+  const buildRequestMessages = useCallback(
+    (
+      instruction: string,
+      conversation: CreativeAssistantMessage[],
+      includeStateContract = true
+    ): AIRequestConfig['messages'] => [
+      {
+        role: 'system',
+        content: buildCreativeAssistantSystemPrompt({
+          targetLabel,
+          instruction,
+          memory,
+          includeStateContract,
+          enabledSkills: assistantSkillRegistry.enabled([
+            ...PRODUCT_ASSISTANT_SKILL_IDS,
+            ...selectedSkillIds,
+          ]),
+          selectedSkillIds,
+        }),
+      },
+      {
+        role: 'user',
+        content: `项目上下文（每次对话均以最新项目数据为准）：\n${projectContext.slice(0, 16000) || '项目正文暂未填写。'}\n\n已确认项目记忆（仅供参考，不得覆盖当前项目数据）：\n${formatCreativeAssistantMemory(memory)}`,
+      },
+      ...compactConversation(conversation).map(toRequestMessage),
+    ],
+    [memory, projectContext, selectedSkillIds, targetLabel]
+  );
+
+  const runStream = useCallback(
+    async (
+      requestMessages: AIRequestConfig['messages'],
+      onComplete?: (content: string, state: CreativeAssistantState | null) => void,
+      existingAssistantId?: string,
+      options: { followUpSkills?: boolean; initialSkillIds?: AssistantSkillId[] } = {}
+    ) => {
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const assistantId = existingAssistantId ?? messageId();
+      retryRequestsRef.current[assistantId] = { requestMessages, onComplete };
+      let response = '';
+      const selectedCatalogIds = (options.initialSkillIds ?? []).filter(
+        (id): id is CatalogAssistantSkillId =>
+          assistantSkillRegistry.get(id)?.visibility === 'user-selectable'
+      );
+      const enabledSkillIds = [...PRODUCT_ASSISTANT_SKILL_IDS, ...selectedCatalogIds];
+      const skillLabels = selectedCatalogIds
+        .map((id) => assistantSkillRegistry.get(id)?.label)
+        .filter((label): label is string => Boolean(label));
+      let agentSteps = createAgentTimeline(skillLabels);
+      let followUpCandidate = false;
+      setGenerating(true);
+      setStreamingMessageId(assistantId);
+      setError('');
+      setMessages((items) =>
+        existingAssistantId
+          ? items.map((item) =>
+              item.id === assistantId
+                ? {
+                    ...item,
+                    content: '',
+                    thinking: undefined,
+                    state: undefined,
+                    skillCalls: undefined,
+                    agentSteps,
+                  }
+                : item
+            )
+          : [
+              ...items,
+              {
+                id: assistantId,
+                role: 'assistant',
+                content: '',
+                agentSteps,
+              },
+            ]
+      );
+      try {
+        for await (const event of configuredDialogueEvents(requestMessages, controller.signal)) {
+          if (controller.signal.aborted) break;
+          if (event.kind === 'thinking') continue;
+          response += event.text;
+          updateAssistantMessage(assistantId, {
+            content: hideCreativeAssistantStateMarker(response),
+          });
+        }
+        if (controller.signal.aborted) {
+          agentSteps = failRunningAgentSteps(agentSteps);
+          updateAssistantMessage(assistantId, { agentSteps });
+          toast.info('已停止 AI 回复，已收到的内容已保留');
+        } else {
+          agentSteps = finishAgentTimeline(agentSteps);
+          const parsed = parseCreativeAssistantResponse(response);
+          const modelSkillCall = parsed.skillId
+            ? assistantSkillRegistry.resolve(parsed.skillId, enabledSkillIds)
+            : null;
+          updateAssistantMessage(assistantId, {
+            content: parsed.content,
+            agentSteps,
+            thinking: undefined,
+            ...(parsed.state ? { state: parsed.state } : {}),
+            ...(modelSkillCall ? { skillCalls: [modelSkillCall] } : { skillCalls: undefined }),
+          });
+          onComplete?.(parsed.content, parsed.state);
+          delete retryRequestsRef.current[assistantId];
+          followUpCandidate =
+            options.followUpSkills !== false &&
+            modelSkillCall?.status === 'accepted' &&
+            modelSkillCall.id === 'propose-candidate';
+        }
+      } catch (streamError) {
+        if (controller.signal.aborted) {
+          agentSteps = failRunningAgentSteps(agentSteps);
+          updateAssistantMessage(assistantId, { agentSteps });
+          toast.info('已停止 AI 回复，已收到的内容已保留');
+        } else {
+          updateAssistantMessage(assistantId, {
+            content: '本次请求未完成。',
+            agentSteps: failRunningAgentSteps(agentSteps),
+          });
+          setError(formatAssistantError(streamError));
+        }
+      } finally {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          setGenerating(false);
+          setStreamingMessageId((current) => (current === assistantId ? null : current));
+        }
+        if (followUpCandidate) {
+          queueMicrotask(() => generateCandidateRef.current?.());
+        }
+      }
+    },
+    [updateAssistantMessage]
+  );
+
+  const retryMessage = (assistantId: string) => {
+    if (generating) return;
+    const request = retryRequestsRef.current[assistantId];
+    if (!request) return;
+    void runStream(request.requestMessages, request.onComplete, assistantId);
+  };
+
+  const removeMessage = (id: string) => {
+    if (generating) return;
+    delete retryRequestsRef.current[id];
+    setMessages((items) => items.filter((item) => item.id !== id));
+    setError('');
+  };
+
+  const sendMessage = () => {
+    const content = input.trim();
+    if ((!content && attachments.length === 0) || generating) return;
+    const nextMessages = [
+      ...messages,
+      { id: messageId(), role: 'user' as const, content, attachments },
+    ];
+    setMessages(nextMessages);
+    setInput('');
+    setAttachments([]);
+    const selectedThisTurn = selectedSkillIds;
+    const selectedCatalog = selectedThisTurn
+      .map((id) => assistantSkillRegistry.get(id))
+      .filter(
+        (skill): skill is NonNullable<typeof skill> => skill?.visibility === 'user-selectable'
+      );
+    const catalogInstruction = selectedCatalog
+      .map((skill) => skill.instruction)
+      .filter(Boolean)
+      .join('\n');
+    setSelectedSkillIds([]);
+    setSkillMenuOpen(false);
+    void runStream(
+      buildRequestMessages(
+        catalogInstruction
+          ? `${catalogInstruction}\n\n请根据项目上下文和当前对话执行用户点选的技能。${selectedCatalog.length >= 2 ? '多个技能的结果都要保留，结尾只用「本轮结论」问一件事。' : ''}正文不要输出 JSON；按系统约定追加状态标记，也不要声称已经回填表单。`
+          : '请先根据项目上下文和当前对话澄清需求，提出必要问题或给出可执行建议。正文不要输出 JSON；按系统约定追加状态标记，也不要声称已经回填表单。',
+        nextMessages
+      ),
+      undefined,
+      undefined,
+      {
+        initialSkillIds: selectedThisTurn,
+      }
+    );
+  };
+
+  const generateCandidate = () => {
+    setCandidate(null);
+    setCandidateRaw(null);
+    void runStream(
+      buildRequestMessages(
+        `基于已确认的需求生成可回填到“${targetLabel}”的最终候选稿。严格遵守以下输出约束，不要解释：\n${candidateInstructions}`,
+        messages,
+        false
+      ),
+      (raw) => {
+        setCandidateRaw(raw);
+        try {
+          const value = parseCandidate(raw);
+          setCandidate({ raw, value });
+          if (autoPreviewCandidate) {
+            onApply(value);
+            toast.success(`${targetLabel}已回填到左侧草稿，确认保存后才会写入已确认角色`);
+          }
+        } catch (parseError) {
+          setCandidate(null);
+          setError(
+            parseError instanceof Error
+              ? parseError.message
+              : '候选稿格式无效，请继续澄清或重新生成'
+          );
+        }
+      },
+      undefined,
+      { followUpSkills: false, initialSkillIds: ['propose-candidate'] }
+    );
+  };
+  generateCandidateRef.current = generateCandidate;
+
+  const selectAttachments = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    const available = MAX_ATTACHMENTS - attachments.length;
+    if (selected.length > available) toast.warning(`单次对话最多附加 ${MAX_ATTACHMENTS} 张图片`);
+    const supported = selected.slice(0, available).filter((file) => {
+      if (!SUPPORTED_IMAGE_TYPES.has(file.type as CreativeAssistantAttachment['mimeType'])) {
+        toast.warning(`暂不支持图片格式：${file.name}`);
+        return false;
+      }
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        toast.warning(`图片不能超过 5 MB：${file.name}`);
+        return false;
+      }
+      return true;
+    });
+
+    try {
+      const nextAttachments = await Promise.all(
+        supported.map(async (file) => ({
+          id: attachmentId(),
+          name: file.name,
+          mimeType: file.type as CreativeAssistantAttachment['mimeType'],
+          dataUrl: await readFileAsDataUrl(file),
+        }))
+      );
+      setAttachments((items) => [...items, ...nextAttachments]);
+    } catch (readError) {
+      setError(formatAssistantError(readError));
+    }
+  };
+
+  const copyCandidate = async () => {
+    if (!candidateRaw) return;
+    try {
+      await navigator.clipboard.writeText(candidateRaw);
+      toast.success('候选稿已复制');
+    } catch {
+      toast.error('复制失败，请手动选择候选稿内容');
+    }
+  };
+
+  const persistCandidate = () => {
+    if (!onPersist) return;
+    void Promise.resolve(onPersist()).then(() => {
+      toast.success(`${targetLabel}已保存`);
+    });
+  };
+
+  const applyCandidate = () => {
+    if (!candidate) return;
+    onApply(candidate.value);
+    setConfirmOpen(false);
+    setOpen(false);
+    toast.success(`${targetLabel}已填充到表单，请继续检查并保存`);
+  };
+
+  const saveMessageState = (message: CreativeAssistantMessage) => {
+    if (
+      !projectId ||
+      !message.state ||
+      message.stateSaved ||
+      isCreativeAssistantStateApplied(message.state, memory)
+    )
+      return;
+    setMemory((current) => mergeCreativeAssistantMemory(current, message.state!));
+    setMessages((items) =>
+      items.map((item) => (item.id === message.id ? { ...item, stateSaved: true } : item))
+    );
+    toast.success('本轮确认内容已保存到当前项目记忆');
+  };
+
+  const clearProjectMemory = () => {
+    clearCreativeAssistantMemory(projectId);
+    setMemory({ ...EMPTY_CREATIVE_ASSISTANT_MEMORY });
+    setMessages((items) => items.map(({ stateSaved: _stateSaved, ...item }) => item));
+    toast.success('当前项目记忆已清除');
+  };
+
+  const startNewConversation = () => {
+    stopGeneration();
+    setMessages([]);
+    setAttachments([]);
+    setInput('');
+    setCandidate(null);
+    setCandidateRaw(null);
+    setError('');
+    retryRequestsRef.current = {};
+    setConversationVersion((version) => version + 1);
+  };
+
+  const clearConversation = () => {
+    stopGeneration();
+    setMessages([]);
+    setAttachments([]);
+    setInput('');
+    setCandidate(null);
+    setCandidateRaw(null);
+    setError('');
+    retryRequestsRef.current = {};
+    skipNextInitializationRef.current = true;
+    setConversationVersion((version) => version + 1);
+  };
+
+  useEffect(() => {
+    const conversationKey = `${projectId ?? targetLabel}:${conversationVersion}`;
+    if (skipNextInitializationRef.current) {
+      skipNextInitializationRef.current = false;
+      initializedConversationRef.current = conversationKey;
+      return;
+    }
+    if (
+      !open ||
+      !sessionReady ||
+      messages.length > 0 ||
+      generating ||
+      initializedConversationRef.current === conversationKey
+    )
+      return;
+
+    initializedConversationRef.current = conversationKey;
+    void runStream(
+      buildRequestMessages(
+        '请先阅读项目上下文，简要确认你理解的创作目标，并提出一个最关键的澄清问题。正文不要输出 JSON；按系统约定追加状态标记，不要修改或声称已经回填表单。',
+        []
+      )
+    );
+  }, [
+    buildRequestMessages,
+    conversationVersion,
+    generating,
+    messages.length,
+    open,
+    projectContext,
+    projectId,
+    runStream,
+    sessionReady,
+    targetLabel,
+  ]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      stopGeneration();
+      setSkillMenuOpen(false);
+    }
+    setOpen(nextOpen);
+  };
+
+  const toggleSelectedSkill = useCallback((skillId: CatalogAssistantSkillId) => {
+    setSelectedSkillIds((ids) =>
+      ids.includes(skillId) ? ids.filter((id) => id !== skillId) : [...ids, skillId]
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!skillMenuOpen) return undefined;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!skillMenuRef.current?.contains(event.target as Node)) {
+        setSkillMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSkillMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [skillMenuOpen]);
+
+  return (
+    <>
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        className="absolute right-4 top-4 z-10 border-indigo-400/40 bg-slate-950/90 text-indigo-300 shadow-lg hover:bg-indigo-500 hover:text-white"
+        aria-label={`打开${targetLabel} AI 助手`}
+        title={`${targetLabel} AI 助手`}
+        onClick={() => setOpen(true)}
+      >
+        <MessageCircleMore />
+      </Button>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex h-dvh w-full flex-col border-slate-800 bg-slate-950 p-0 text-slate-100 sm:max-w-md"
+        >
+          <SheetHeader className="space-y-2 border-b border-slate-800 px-5 py-4 pr-14 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <SheetTitle className="flex min-w-0 items-center gap-2 text-slate-100">
+                <WandSparkles className="h-5 w-5 shrink-0 text-indigo-400" />
+                AI 创作助手
+              </SheetTitle>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-slate-400 hover:text-white"
+                  title="新建对话"
+                  aria-label="新建对话"
+                  onClick={startNewConversation}
+                  disabled={generating}
+                >
+                  <Plus />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-slate-400 hover:text-rose-300"
+                  title="清空当前对话"
+                  aria-label="清空当前对话"
+                  onClick={clearConversation}
+                  disabled={generating || messages.length === 0}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </div>
+            <SheetDescription className="text-slate-400">
+              当前回填目标：{targetLabel} · 项目记忆需确认后保存
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="min-h-0 flex-1 px-4 py-4">
+            <div className="space-y-3 pr-3" aria-live="polite">
+              {projectId && (
+                <div className="space-y-2 rounded-lg border border-indigo-400/20 bg-indigo-500/5 p-3 text-xs text-slate-300">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 font-medium text-indigo-200">
+                      <BookOpen className="h-4 w-4" />
+                      项目记忆
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-slate-400 hover:text-rose-300"
+                      title="清除当前项目记忆"
+                      aria-label="清除当前项目记忆"
+                      onClick={clearProjectMemory}
+                      disabled={
+                        !memory.intent &&
+                        memory.confirmedFacts.length === 0 &&
+                        memory.glossary.length === 0
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {memory.confirmedFacts.length > 0 ||
+                  memory.constraints.length > 0 ||
+                  memory.glossary.length > 0 ? (
+                    <div className="space-y-1 text-slate-400">
+                      {memory.intent && <p>意图：{memory.intent}</p>}
+                      {memory.confirmedFacts.slice(0, 3).map((fact) => (
+                        <p key={fact}>已确认：{fact}</p>
+                      ))}
+                      {memory.constraints.slice(0, 2).map((constraint) => (
+                        <p key={constraint}>约束：{constraint}</p>
+                      ))}
+                      {memory.glossary.slice(0, 2).map((entry) => (
+                        <p key={entry.term}>
+                          术语：{entry.term}：{entry.meaning}
+                        </p>
+                      ))}
+                      {memory.confirmedFacts.length +
+                        memory.constraints.length +
+                        memory.glossary.length >
+                        7 && <p className="text-slate-500">其余记忆会继续随请求携带。</p>}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500">
+                      暂无已确认记忆。保存本轮识别内容后，新对话会自动携带。
+                    </p>
+                  )}
+                </div>
+              )}
+              {messages.length === 0 && (
+                <p className="rounded-lg border border-dashed border-slate-600 p-4 text-sm text-slate-200">
+                  描述想调整的内容，AI 会先与您澄清细节。
+                </p>
+              )}
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  data-testid={
+                    message.role === 'user'
+                      ? 'creative-assistant-user-message'
+                      : 'creative-assistant-assistant-message'
+                  }
+                  className={
+                    message.role === 'user'
+                      ? 'ml-8 rounded-lg border border-indigo-200 bg-white p-3 text-sm text-slate-900'
+                      : 'mr-5 rounded-lg border border-slate-600 bg-slate-800 p-3 text-sm text-white'
+                  }
+                >
+                  <div className="mb-1 flex justify-end gap-1">
+                    {message.role === 'assistant' &&
+                      retryRequestsRef.current[message.id] &&
+                      message.content === '本次请求未完成。' && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-slate-400 hover:text-indigo-300"
+                          title="重试本次请求"
+                          aria-label="重试本次请求"
+                          onClick={() => retryMessage(message.id)}
+                          disabled={generating}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={
+                        message.role === 'user'
+                          ? 'h-6 w-6 text-slate-400 hover:text-rose-600'
+                          : 'h-6 w-6 text-slate-500 hover:text-rose-300'
+                      }
+                      title="删除消息"
+                      aria-label="删除消息"
+                      onClick={() => removeMessage(message.id)}
+                      disabled={generating}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {message.agentSteps?.length ? (
+                    <AgentThinkingTrace
+                      steps={message.agentSteps}
+                      live={streamingMessageId === message.id}
+                    />
+                  ) : null}
+                  {message.skillCalls?.length ? (
+                    <div className="mb-2 space-y-1 text-xs text-slate-400">
+                      {message.skillCalls.map((call, index) => (
+                        <p key={`${message.id}-skill-${call.id}-${index}`}>
+                          技能 {assistantSkillRegistry.get(call.id)?.label ?? call.id}
+                          {call.status === 'accepted'
+                            ? ' · 已调用'
+                            : ` · 已拒绝${call.reason ? `：${call.reason}` : ''}`}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {message.content ? (
+                    message.role === 'assistant' ? (
+                      <AssistantReplyBody
+                        content={message.content}
+                        live={streamingMessageId === message.id}
+                        candidateRaw={candidateRaw}
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                      </div>
+                    )
+                  ) : message.attachments?.length ? (
+                    '请分析附件图片。'
+                  ) : streamingMessageId === message.id ? null : (
+                    <p className="text-sm text-slate-300">
+                      {message.agentSteps?.some((step) => step.status === 'failed')
+                        ? '已停止，没有可见回复。'
+                        : '本轮没有生成可见回复。'}
+                    </p>
+                  )}
+                  {message.attachments?.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {message.attachments.map((attachment) => (
+                        <img
+                          key={attachment.id}
+                          src={attachment.dataUrl}
+                          alt={attachment.name}
+                          className="h-16 w-16 rounded border border-indigo-300/30 object-cover"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {message.role === 'assistant' && message.state && (
+                    <div className="mt-3 space-y-2 rounded border border-amber-400/20 bg-amber-500/5 p-2 text-xs text-slate-300">
+                      <p className="font-medium text-amber-200">本轮识别结果（确认后才会记住）</p>
+                      {message.state.intent && <p>意图：{message.state.intent}</p>}
+                      {message.state.confirmedFacts.length > 0 && (
+                        <p>已确认：{message.state.confirmedFacts.join('；')}</p>
+                      )}
+                      {message.state.openQuestions.length > 0 && (
+                        <p>待确认：{message.state.openQuestions.join('；')}</p>
+                      )}
+                      {message.state.glossary.length > 0 && (
+                        <p>
+                          术语：
+                          {message.state.glossary
+                            .map((entry) => `${entry.term}：${entry.meaning}`)
+                            .join('；')}
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => saveMessageState(message)}
+                        disabled={
+                          !projectId ||
+                          Boolean(message.stateSaved) ||
+                          isCreativeAssistantStateApplied(message.state, memory)
+                        }
+                      >
+                        {message.stateSaved ||
+                        isCreativeAssistantStateApplied(message.state, memory)
+                          ? '已保存到项目记忆'
+                          : '保存本轮记忆'}
+                      </Button>
+                      {autoPreviewCandidate &&
+                        (message.stateSaved ||
+                          isCreativeAssistantStateApplied(message.state, memory)) && (
+                          <p className="text-[11px] text-slate-500">
+                            项目记忆不会填写左侧角色表单。完整角色（含外观、服饰）请在候选稿区点「保存角色」。
+                          </p>
+                        )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {error && (
+                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+                  {error}
+                </div>
+              )}
+              {candidateRaw && (
+                <div className="space-y-3 rounded-lg border border-emerald-400/40 bg-emerald-950/40 p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-100">
+                      {candidate
+                        ? autoPreviewCandidate
+                          ? '已回填到左侧草稿'
+                          : '可回填候选稿'
+                        : '候选稿原文'}
+                    </p>
+                    <p className="text-xs text-slate-200">
+                      {candidate
+                        ? autoPreviewCandidate
+                          ? '请检查左侧表单的外观与服饰，点击保存后才会写入已确认角色。保存项目记忆不会填写角色表单。'
+                          : '确认前不会修改原表单。'
+                        : '格式暂时无法解析，可复制后手动填写或继续澄清。'}
+                    </p>
+                  </div>
+                  {candidate ? (
+                    <CandidatePreview value={candidate.value} />
+                  ) : (
+                    <pre
+                      data-testid="creative-assistant-candidate-raw"
+                      className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs text-slate-200"
+                    >
+                      {candidateRaw}
+                    </pre>
+                  )}
+                  {candidate && (
+                    <details className="text-xs text-slate-400">
+                      <summary className="cursor-pointer select-none text-slate-300">
+                        查看原文
+                      </summary>
+                      <pre
+                        data-testid="creative-assistant-candidate-raw"
+                        className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-[11px] text-slate-400"
+                      >
+                        {candidateRaw}
+                      </pre>
+                    </details>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => void copyCandidate()}>
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                      复制
+                    </Button>
+                    {candidate &&
+                      (autoPreviewCandidate && onPersist ? (
+                        <Button size="sm" onClick={() => persistCandidate()}>
+                          <Check className="mr-1.5 h-3.5 w-3.5" />
+                          {persistLabel}
+                        </Button>
+                      ) : (
+                        candidate && (
+                          <Button size="sm" onClick={() => setConfirmOpen(true)}>
+                            <Check className="mr-1.5 h-3.5 w-3.5" />
+                            填充表单
+                          </Button>
+                        )
+                      ))}
+                  </div>
+                </div>
+              )}
+              <div
+                ref={transcriptEndRef}
+                aria-hidden="true"
+                data-testid="creative-assistant-transcript-end"
+              />
+            </div>
+          </ScrollArea>
+          <div className="space-y-3 border-t border-slate-800 p-4">
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={generateCandidate} disabled={generating}>
+                <WandSparkles className="mr-1.5 h-3.5 w-3.5" />
+                生成可回填草稿
+              </Button>
+              {generating && (
+                <Button variant="outline" size="sm" onClick={stopGeneration}>
+                  <Square className="mr-1.5 h-3.5 w-3.5" />
+                  停止
+                </Button>
+              )}
+            </div>
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <div key={attachment.id} className="relative">
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.name}
+                      className="h-14 w-14 rounded border border-slate-700 object-cover"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute -right-2 -top-2 h-5 w-5 rounded-full bg-slate-800 p-0 text-slate-200 hover:bg-rose-500"
+                      aria-label={`移除图片 ${attachment.name}`}
+                      onClick={() =>
+                        setAttachments((items) => items.filter((item) => item.id !== attachment.id))
+                      }
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input
+              ref={uploadRef}
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              multiple
+              onChange={(event) => void selectAttachments(event)}
+            />
+            <div className="rounded-xl border border-slate-200 bg-white focus-within:border-indigo-400">
+              {selectedSkillIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-2 pt-2" aria-label="已选技能">
+                  {selectedSkillIds.map((skillId) => {
+                    const skill = assistantSkillRegistry.get(skillId);
+                    if (!skill) return null;
+                    return (
+                      <span
+                        key={skill.id}
+                        className="inline-flex h-6 max-w-full items-center gap-1 rounded-md bg-slate-100 pl-1.5 pr-0.5 text-xs text-slate-800 ring-1 ring-inset ring-slate-200"
+                      >
+                        <WandSparkles className="h-3 w-3 shrink-0 text-indigo-500" />
+                        <span className="truncate">{skill.label}</span>
+                        <button
+                          type="button"
+                          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+                          aria-label={`移除技能 ${skill.label}`}
+                          onClick={() =>
+                            setSelectedSkillIds((ids) => ids.filter((id) => id !== skill.id))
+                          }
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <label className="sr-only" htmlFor={`creative-assistant-${targetLabel}`}>
+                AI 对话输入
+              </label>
+              <Textarea
+                id={`creative-assistant-${targetLabel}`}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="输入创作要求，或附加图片供 AI 分析..."
+                rows={3}
+                disabled={generating}
+                className="border-0 bg-transparent text-slate-900 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="添加图片"
+                aria-label="添加图片"
+                onClick={() => uploadRef.current?.click()}
+                disabled={generating || attachments.length >= MAX_ATTACHMENTS}
+              >
+                <ImagePlus />
+              </Button>
+              <div className="relative" ref={skillMenuRef}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  aria-label="选择技能"
+                  aria-expanded={skillMenuOpen}
+                  aria-haspopup="menu"
+                  disabled={generating}
+                  onClick={() => setSkillMenuOpen((isOpen) => !isOpen)}
+                >
+                  技能
+                  <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                </Button>
+                {skillMenuOpen ? (
+                  <div
+                    role="menu"
+                    aria-label="可选技能"
+                    className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 py-1 text-slate-100 shadow-lg"
+                  >
+                    <p className="px-3 py-1.5 text-xs text-slate-400">本轮可多选</p>
+                    {assistantSkillRegistry.userSelectable().map((skill) => {
+                      const checked = selectedSkillIds.includes(
+                        skill.id as CatalogAssistantSkillId
+                      );
+                      return (
+                        <button
+                          key={skill.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-label={skill.label}
+                          aria-checked={checked}
+                          disabled={generating}
+                          className="flex w-full items-center gap-2 bg-transparent px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                          onClick={() => toggleSelectedSkill(skill.id as CatalogAssistantSkillId)}
+                        >
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-500">
+                            {checked ? <Check className="h-3 w-3 text-indigo-300" /> : null}
+                          </span>
+                          <span>
+                            <span className="block">{skill.label}</span>
+                            <span className="block text-xs text-slate-500">
+                              {skill.description}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+              <Button
+                className="flex-1"
+                onClick={sendMessage}
+                disabled={generating || (!input.trim() && attachments.length === 0)}
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                发送消息
+              </Button>
+            </div>
+          </div>
+          <ConfirmDialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            title={`确认填充${targetLabel}？`}
+            description="当前表单内容会被候选稿替换；填充后仍可在原表单继续编辑。"
+            okText="确认填充"
+            cancelText="取消"
+            onOk={applyCandidate}
+          />
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
