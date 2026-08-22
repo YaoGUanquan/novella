@@ -4,8 +4,41 @@
 
 import { agentRegistry } from '@/core/services/agent/AgentRegistry';
 import { MasterDirectorAgent } from '@/core/services/agent/MasterDirectorAgent';
+import { mergeWorkflowResultIntoProject } from '@/features/agent/utils/project-persistence';
 
 describe('Multi-Agent Hub-and-Spoke & Blackboard Orchestration Suite', () => {
+  it('should merge Multi-Agent output into the existing project without changing its identity', () => {
+    const existingProject = {
+      id: 'prj-existing',
+      name: '原始工程',
+      description: '原始描述',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const merged = mergeWorkflowResultIntoProject(existingProject, {
+      name: '推导后的工程',
+      content: '推导后的剧本',
+      status: 'processing',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    expect(merged).toMatchObject({
+      id: 'prj-existing',
+      name: '推导后的工程',
+      content: '推导后的剧本',
+      status: 'processing',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+  });
+
+  it('should return null when there is no existing project to merge into', () => {
+    expect(
+      mergeWorkflowResultIntoProject(undefined, { name: '新工程', content: '剧本' })
+    ).toBeNull();
+  });
+
   it('Should ensure all native agents have 5-letter uppercase names', () => {
     const allAgents = agentRegistry.getAll().filter((a) => !a.metadata.isCustom);
     const names = allAgents.map((a) => a.metadata.name);
@@ -55,7 +88,9 @@ describe('Multi-Agent Hub-and-Spoke & Blackboard Orchestration Suite', () => {
 
     expect(customAgent.metadata.isCustom).toBe(true);
     expect(customAgent.metadata.name).toBe('EXTRA');
-    expect(agentRegistry.getAll().some((a) => a.metadata.id === customAgent.metadata.id)).toBe(true);
+    expect(agentRegistry.getAll().some((a) => a.metadata.id === customAgent.metadata.id)).toBe(
+      true
+    );
 
     // 删除自定义 Agent 测试
     const removed = agentRegistry.removeAgent(customAgent.metadata.id);

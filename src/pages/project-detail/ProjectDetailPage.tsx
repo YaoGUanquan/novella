@@ -4,6 +4,7 @@
  */
 import {
   ArrowLeft,
+  Check,
   DollarSign,
   Download,
   Edit,
@@ -21,6 +22,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 import { AudioEditorPanel } from '@/components/media/audio/AudioEditorPanel';
 import { ExportPanel } from '@/components/project/ExportPanel';
+import { AICreativeAssistantSheet } from '@/features/creative-assistant';
 import { Button } from '@/shared/components/ui/button';
 import Empty from '@/shared/components/ui/empty';
 import { Spin } from '@/shared/components/ui/spin';
@@ -28,6 +30,7 @@ import { Tabs, TabPane } from '@/shared/components/ui/tabs';
 import type { Character } from '@/shared/types/novel';
 import type { VideoSegment } from '@/shared/types/script';
 
+import { createScriptDraft } from './hooks/projectDetailActions';
 import { useProjectDetail } from './hooks/useProjectDetail';
 
 const importScriptEditor = () => import('@/features/storyboard/components/ScriptEditor');
@@ -42,29 +45,32 @@ const CharacterDesigner = lazy(importCharacterDesigner);
 const CompositionStudio = lazy(importCompositionStudio);
 
 const ProjectDetail = () => {
-  const { id } = useParams<{ id: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
   const {
     loading,
     project,
     activeScript,
+    scriptDraft,
     activeTab,
     storyboardFrames,
     exportQualityGate,
     setActiveTab,
+    setScriptDraft,
     handleApplyRenderedFrame,
     handleScriptChange,
+    handleConfirmScriptDraft,
     handleDeleteProject,
     persistProjectPatch,
     preloadTabModules,
-  } = useProjectDetail({ projectId: id ?? '' });
+  } = useProjectDetail({ projectId: projectId ?? '' });
 
   useEffect(() => {
     preloadTabModules(activeTab);
   }, [preloadTabModules, activeTab]);
 
-  const handleEditClick = () => navigate(`/project/edit/${id}`);
+  const handleEditClick = () => navigate(`/project/edit/${projectId}`);
 
   if (loading) {
     return (
@@ -119,6 +125,69 @@ const ProjectDetail = () => {
       <div className="p-6 rounded-3xl bg-[var(--card)] border border-[var(--border)] backdrop-blur-2xl shadow-xl">
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab="剧本拆解与分镜" key="novel">
+            <div className="relative mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)]/60 p-4">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">项目内容驱动脚本</p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {project.content || project.novelText || project.script
+                    ? '基于当前正文生成草稿，确认后才会写入项目。'
+                    : '请先导入小说或剧本文本。'}
+                </p>
+              </div>
+              <AICreativeAssistantSheet
+                projectId={project.id}
+                targetLabel="脚本草稿"
+                projectContext={[
+                  `项目名称：${project.name}`,
+                  `项目简介：${project.description || '未填写'}`,
+                  `视觉画风：${project.artStyle ?? '未设置'}`,
+                  `目标画幅：${project.aspectRatio ?? '未设置'}`,
+                  `项目正文：\n${(activeScript?.content || project.content || project.novelText || project.script || '').trim()}`,
+                  project.characters?.length
+                    ? `已确认角色：\n${JSON.stringify(project.characters)}`
+                    : '已确认角色：暂无',
+                  project.storyAnalysis
+                    ? `已确认剧情分析：\n${JSON.stringify(project.storyAnalysis)}`
+                    : '已确认剧情分析：暂无',
+                ].join('\n\n')}
+                candidateInstructions="直接返回可用于漫剧分镜的中文脚本正文。保留人物、冲突与关键动作，每个场景单独一行；不要使用 Markdown、JSON 或解释文字。"
+                parseCandidate={(content) => {
+                  const draft = content.trim();
+                  if (!draft) throw new Error('AI 未返回可用的脚本正文');
+                  return createScriptDraft(project.name, draft);
+                }}
+                onApply={setScriptDraft}
+              />
+            </div>
+            {scriptDraft && (
+              <div className="mb-4 space-y-3 rounded-xl border border-cyan-500/40 bg-cyan-500/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--foreground)]">AI 脚本草稿</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      当前内容尚未覆盖已确认脚本。
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleConfirmScriptDraft}>
+                      <Check className="mr-1 h-4 w-4" />
+                      确认并保存
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  value={scriptDraft.content}
+                  onChange={(event) =>
+                    setScriptDraft({
+                      ...scriptDraft,
+                      content: event.target.value,
+                    })
+                  }
+                  className="min-h-32 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-sm text-[var(--foreground)]"
+                  aria-label="AI 脚本草稿"
+                />
+              </div>
+            )}
             <Suspense fallback={<Spin tip="正在载入剧本编辑器..." />}>
               <ScriptEditor
                 segments={(activeScript?.segments as unknown as VideoSegment[]) || []}
@@ -144,7 +213,7 @@ const ProjectDetail = () => {
             <Suspense fallback={<Spin tip="正在载入 4K 渲染中心..." />}>
               <RenderCenter
                 frames={storyboardFrames}
-                projectId={id}
+                projectId={projectId}
                 onApplyRenderedFrame={handleApplyRenderedFrame}
               />
             </Suspense>
@@ -162,7 +231,7 @@ const ProjectDetail = () => {
 
           <TabPane tab="4K 完工导出" key="export">
             <ExportPanel
-              projectId={id ?? ''}
+              projectId={projectId ?? ''}
               qualityGate={exportQualityGate}
               onNavigateToEdit={handleEditClick}
             />

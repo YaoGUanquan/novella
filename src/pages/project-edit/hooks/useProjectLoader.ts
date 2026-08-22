@@ -7,6 +7,7 @@ import type { ProjectData } from '@/core/project/types/project';
 import type { StoryAnalysis, Character } from '@/core/script/types/novel';
 import { tauriService } from '@/core/services';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
+import { useProjectStore } from '@/shared/stores/project-store';
 
 /** Page-local extension of canonical ProjectData with strongly-typed fields. */
 export interface ProjectEditData extends ProjectData {
@@ -57,8 +58,6 @@ export function useProjectLoader(projectId: string | undefined): {
     if (!projectId) return;
 
     const loadFromStore = () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { useProjectStore } = require('@/shared/stores/project-store');
       const storeState = useProjectStore.getState();
       const fallbackProject =
         storeState.projects.find((p: any) => String(p.id) === String(projectId)) ||
@@ -82,7 +81,7 @@ export function useProjectLoader(projectId: string | undefined): {
           name: fallbackProject.name || '未命名漫剧工程',
           description: fallbackProject.description ?? '',
           content: fallbackProject.content || fallbackProject.novelText,
-          novelMetadata: fallbackProject.novelMetadata,
+          novelMetadata: fallbackProject.novelMetadata as ScriptImportMetadata | undefined,
           storyAnalysis: fallbackProject.storyAnalysis,
           storyboardFrames: fallbackProject.storyboardFrames || fallbackProject.parsedScenes,
           storyboardComments: fallbackProject.storyboardComments,

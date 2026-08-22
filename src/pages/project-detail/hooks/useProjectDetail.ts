@@ -14,6 +14,7 @@ import type { ProjectData } from '@/core/project/types/project';
 import type { Script, VideoSegment } from '@/core/script/types/script';
 import { collaborationService } from '@/core/services';
 import type { EvaluationScores, FrameComment, StoryboardVersion } from '@/core/services';
+import { parseScriptSegments } from '@/core/services/ai/text/ai-mock-data';
 import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
 import { useProjectStore } from '@/stores';
@@ -21,6 +22,7 @@ import { useProjectStore } from '@/stores';
 import {
   useHandleApplyRenderedFrame,
   useHandleCreateScript,
+  useHandleConfirmScriptDraft,
   useHandleExportReviewNotes,
   useHandleExportScript,
   useHandleScriptChange,
@@ -42,6 +44,7 @@ export interface UseProjectDetailReturn {
   loading: boolean;
   project: ProjectData | null;
   activeScript: Script | null;
+  scriptDraft: Script | null;
   activeTab: string;
   novelMetadata: ScriptImportMetadata | null;
   selectedFrameId: string | undefined;
@@ -56,6 +59,7 @@ export interface UseProjectDetailReturn {
   setProject: React.Dispatch<React.SetStateAction<ProjectData | null>>;
   setActiveScript: React.Dispatch<React.SetStateAction<Script | null>>;
   setActiveTab: React.Dispatch<React.SetStateAction<string>>;
+  setScriptDraft: React.Dispatch<React.SetStateAction<Script | null>>;
   setNovelMetadata: React.Dispatch<React.SetStateAction<ScriptImportMetadata | null>>;
   setSelectedFrameId: React.Dispatch<React.SetStateAction<string | undefined>>;
 
@@ -64,7 +68,7 @@ export interface UseProjectDetailReturn {
   handleApplyRenderedFrame: (frameId: string, imageUrl: string) => void;
   handleExportReviewNotes: () => Promise<void>;
   handleCreateScript: () => void;
-  handleGenerateScript: () => void;
+  handleConfirmScriptDraft: () => void;
   handleScriptChange: (segments: VideoSegment[]) => void;
   handleExportScript: () => Promise<void>;
   handleDeleteProject: () => void;
@@ -79,6 +83,7 @@ export function useProjectDetail({ projectId }: UseProjectDetailOptions): UsePro
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<ProjectData | null>(null);
   const [activeScript, setActiveScript] = useState<Script | null>(null);
+  const [scriptDraft, setScriptDraft] = useState<Script | null>(null);
   const [activeTab, setActiveTab] = useState('novel');
   const [novelMetadata, setNovelMetadata] = useState<ScriptImportMetadata | null>(null);
   const [selectedFrameId, setSelectedFrameId] = useState<string | undefined>(undefined);
@@ -114,13 +119,17 @@ export function useProjectDetail({ projectId }: UseProjectDetailOptions): UsePro
     setActiveScript,
     updateProject
   );
+  const handleConfirmScriptDraft = useHandleConfirmScriptDraft(
+    project,
+    scriptDraft,
+    setProject,
+    setActiveScript,
+    setScriptDraft,
+    updateProject
+  );
   const handleExportScript = useHandleExportScript(project, activeScript);
 
   // ─── 内联简单操作 ───
-  const handleGenerateScript = useCallback(() => {
-    // Caller should use useNavigate - this returns navigation intent
-  }, []);
-
   const handleDeleteProject = useCallback(() => {
     if (!projectId) return;
     deleteProject(projectId);
@@ -170,7 +179,27 @@ export function useProjectDetail({ projectId }: UseProjectDetailOptions): UsePro
 
     if (targetProject) {
       setProject(targetProject as ProjectData);
-      if (targetProject.scripts?.length) setActiveScript(targetProject.scripts[0]);
+      if (targetProject.scripts?.length) {
+        setActiveScript(targetProject.scripts[0]);
+      } else {
+        const source = (
+          targetProject.content ||
+          targetProject.novelText ||
+          targetProject.script ||
+          ''
+        ).trim();
+        if (source) {
+          const now = new Date().toISOString();
+          setActiveScript({
+            id: `draft_${targetProject.id}`,
+            title: `${targetProject.name} 内容草稿`,
+            content: source,
+            segments: parseScriptSegments(source),
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
       if (targetProject.novelMetadata)
         setNovelMetadata(targetProject.novelMetadata as ScriptImportMetadata);
       if (
@@ -201,6 +230,7 @@ export function useProjectDetail({ projectId }: UseProjectDetailOptions): UsePro
     loading,
     project,
     activeScript,
+    scriptDraft,
     activeTab,
     novelMetadata,
     selectedFrameId,
@@ -211,13 +241,14 @@ export function useProjectDetail({ projectId }: UseProjectDetailOptions): UsePro
     setProject,
     setActiveScript,
     setActiveTab,
+    setScriptDraft,
     setNovelMetadata,
     setSelectedFrameId,
     persistProjectPatch,
     handleApplyRenderedFrame,
     handleExportReviewNotes,
     handleCreateScript,
-    handleGenerateScript,
+    handleConfirmScriptDraft,
     handleScriptChange,
     handleExportScript,
     handleDeleteProject,

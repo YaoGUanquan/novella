@@ -26,6 +26,7 @@ import { useTheme } from '@/app/providers/ThemeContext';
 import CreateProjectModal from '@/shared/components/project/CreateProjectModal';
 import { Button } from '@/shared/components/ui/button';
 import { AutoUpdaterModal } from '@/shared/components/updater/AutoUpdaterModal';
+import { useProjectStore } from '@/shared/stores/project-store';
 
 import { AppLayoutProps } from './types';
 
@@ -76,9 +77,16 @@ const SOP_STAGES_DOC = [
   },
 ];
 
-const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
+const AppLayout = ({
+  children,
+  header,
+  sidebar,
+  footer,
+  CreateProjectModalComponent = CreateProjectModal,
+}: AppLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const currentProjectId = useProjectStore((state) => state.currentProject?.id);
   const { theme, setTheme, toggleTheme, isDarkMode } = useTheme();
 
   // Modals & Menu State
@@ -102,6 +110,13 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
 
   const activePath = location.pathname;
 
+  const projectIdFromPath = location.pathname.match(/^\/project\/(?:edit\/)?([^/]+)/)?.[1];
+  const workflowProjectId =
+    projectIdFromPath && projectIdFromPath !== 'new' ? projectIdFromPath : currentProjectId;
+  const workflowPath = workflowProjectId
+    ? `/workflow?projectId=${encodeURIComponent(workflowProjectId)}`
+    : '/workflow';
+
   const currentStage = activePath.includes('edit')
     ? 'Board'
     : activePath.includes('workflow')
@@ -119,19 +134,19 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
     <div className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300 font-sans selection:bg-cyan-500/30 selection:text-white">
       {/* ── 顶部流光毛玻璃 Header ── */}
       {header || (
-        <header className="h-14 px-4 border-b border-[var(--border)] bg-[var(--card)] backdrop-blur-xl flex items-center justify-between sticky top-0 z-40 shadow-sm transition-all duration-300">
+        <header className="h-14 min-h-14 px-2 sm:px-4 gap-2 border-b border-[var(--border)] bg-[var(--card)] backdrop-blur-xl flex items-center justify-between sticky top-0 z-40 shadow-sm transition-all duration-300">
           {/* 品牌 Brand Logo & Title */}
-          <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 flex items-center">
             <div
-              className="flex items-center gap-2 cursor-pointer group select-none"
+              className="flex min-w-0 items-center gap-1.5 sm:gap-2 cursor-pointer group select-none"
               onClick={() => navigate('/')}
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-purple-600 p-[1px] shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-300">
+              <div className="w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br from-cyan-400 to-purple-600 p-[1px] shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-300">
                 <div className="w-full h-full bg-[#050810] rounded-[11px] flex items-center justify-center">
                   <Clapperboard className="w-4 h-4 text-[#00f5d4]" />
                 </div>
               </div>
-              <div className="flex flex-col">
+              <div className="hidden sm:flex min-w-0 flex-col">
                 <span className="text-sm font-black tracking-wider bg-gradient-to-r from-[var(--neon-cyan)] via-[var(--neon-purple)] to-[var(--neon-pink)] bg-clip-text text-transparent">
                   Novella
                 </span>
@@ -139,14 +154,14 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
                   Novella AI
                 </span>
               </div>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[var(--neon-cyan-bg)] text-[var(--neon-cyan)] border border-[var(--neon-cyan-border)]">
+              <span className="hidden sm:inline-flex ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[var(--neon-cyan-bg)] text-[var(--neon-cyan)] border border-[var(--neon-cyan-border)]">
                 v0.0.1 PRO
               </span>
             </div>
           </div>
 
           {/* 顶栏 Center Pill Navigation Tabs (主题自适应 Segment Control) */}
-          <div className="hidden md:flex items-center gap-1 bg-[var(--accent)]/60 p-1 rounded-xl border border-[var(--border)] backdrop-blur-md">
+          <div className="hidden lg:flex shrink-0 items-center gap-1 bg-[var(--accent)]/60 p-1 rounded-xl border border-[var(--border)] backdrop-blur-md">
             <button
               onClick={() => navigate('/')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -160,7 +175,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
             </button>
 
             <button
-              onClick={() => navigate('/workflow')}
+              onClick={() => navigate(workflowPath)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activePath.includes('workflow')
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
@@ -197,7 +212,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
           </div>
 
           {/* 右侧系统服务正常状态指示与主题切换 */}
-          <div className="flex items-center gap-3">
+          <div className="shrink-0 flex items-center gap-1 sm:gap-2">
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 font-mono font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>系统服务正常</span>
@@ -206,7 +221,8 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
             <Button
               size="sm"
               onClick={() => setIsCreateModalOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-sm cursor-pointer border-0 rounded-lg px-3.5"
+              aria-label="新建工程"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-sm cursor-pointer border-0 rounded-lg px-2 sm:px-3.5"
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
               新建工程
@@ -216,7 +232,8 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
             <button
               onClick={toggleTheme}
               title={`当前模式: ${isDarkMode ? '深色深空' : '浅色冰晶'} (点击切换)`}
-              className="p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--foreground)] transition-all cursor-pointer shadow-sm hover:scale-105"
+              aria-label="切换主题"
+              className="shrink-0 p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--foreground)] transition-all cursor-pointer shadow-sm hover:scale-105"
             >
               {isDarkMode ? (
                 <Sun className="w-4 h-4 text-amber-400" />
@@ -230,7 +247,8 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
               <button
                 onClick={() => setIsHelpMenuOpen((prev) => !prev)}
                 title="操作指南与项目说明"
-                className="p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--foreground)] transition-all cursor-pointer flex items-center gap-1 text-xs"
+                aria-label="帮助"
+                className="shrink-0 p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--foreground)] transition-all cursor-pointer flex items-center gap-1 text-xs"
               >
                 <HelpCircle className="w-4 h-4 text-[var(--neon-cyan)]" />
                 <span className="hidden sm:inline">帮助</span>
@@ -266,7 +284,8 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
             <button
               onClick={() => setIsUpdaterOpen(true)}
               title="检查最新版本"
-              className="p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all cursor-pointer"
+              aria-label="检查最新版本"
+              className="shrink-0 p-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all cursor-pointer"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -299,7 +318,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
               </button>
 
               <button
-                onClick={() => navigate('/workflow')}
+                onClick={() => navigate(workflowPath)}
                 title="AI 漫剧向导"
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activePath.includes('workflow')
@@ -330,7 +349,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
         )}
 
         {/* 视口主容器 - 确保全平台全页面 100% 极速流畅垂直滚动 */}
-        <main className="flex-1 overflow-y-auto h-[calc(100vh-3.5rem)] bg-[var(--background)] p-4 md:p-6 transition-colors duration-300">
+        <main className="min-w-0 flex-1 overflow-y-auto h-[calc(100vh-3.5rem)] bg-[var(--background)] p-3 sm:p-4 md:p-6 transition-colors duration-300">
           {children}
         </main>
       </div>
@@ -408,8 +427,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
                 Novella AI 漫剧创作平台
               </h4>
               <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                采用了 Tauri v2 + React 19 + Rust + Monorepo
-                模块化架构，将小说一键转化为专业级 4K
+                采用了 Tauri v2 + React 19 + Rust + Monorepo 模块化架构，将小说一键转化为专业级 4K
                 漫剧视频。纯本地无账号极速创作，支持硬件压制与多音轨混音。
               </p>
             </div>
@@ -418,7 +436,7 @@ const AppLayout = ({ children, header, sidebar, footer }: AppLayoutProps) => {
       )}
 
       {/* 新建工程 Modal */}
-      <CreateProjectModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
+      <CreateProjectModalComponent open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
     </div>
   );
 };

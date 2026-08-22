@@ -11,12 +11,14 @@ import { toast } from '@/components/ui/toast';
 import type { ProjectData } from '@/core/project/types/project';
 import type { Script, ScriptSegment, VideoSegment } from '@/core/script/types/script';
 import {
+  aiService,
   collaborationService,
   costService,
   reviewExportService,
   tauriService,
 } from '@/core/services';
 import type { EvaluationScores } from '@/core/services';
+import { parseScriptSegments } from '@/core/services/ai/text/ai-mock-data';
 import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 import { handleAsyncError } from '@/core/utils/async';
 import { logger } from '@/core/utils/logger';
@@ -153,6 +155,133 @@ export function useHandleCreateScript(
   }, [project, setProject, setActiveScript, updateProject]);
 }
 
+export function useHandleGenerateScript(
+  project: ProjectData | null,
+  activeScript: Script | null,
+  setScriptDraft: React.Dispatch<React.SetStateAction<Script | null>>,
+  setGenerating: React.Dispatch<React.SetStateAction<boolean>>,
+  controllerRef: React.MutableRefObject<AbortController | null>
+) {
+  return useCallback(
+    async (creativeBrief = '') => {
+      if (!project) return;
+      const source = (
+        activeScript?.content ||
+        project.content ||
+        project.novelText ||
+        project.script ||
+        ''
+      ).trim();
+      if (!source) {
+        toast.warning('请先导入小说或剧本文本');
+        return;
+      }
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const now = new Date().toISOString();
+      const draftId = `draft_${uuidv4()}`;
+      const instruction = creativeBrief.trim();
+      let generated = '';
+      setGenerating(true);
+      setScriptDraft({
+        id: draftId,
+        title: `${project.name} AI 脚本草稿`,
+        content: '',
+        segments: [],
+        createdAt: now,
+        updatedAt: now,
+        modelUsed: 'gpt-5.6-sol',
+      });
+      try {
+        toast.info('AI 正在流式生成脚本草稿...');
+        const prompt = `${activeScript ? '请优化以下现有脚本' : '请将以下项目内容改写为可用于漫剧分镜的中文脚本'}。保留人物、冲突和关键动作，每个场景单独一行，直接输出脚本正文，不要解释。${instruction ? `\n\n用户创作要求：${instruction}` : ''}\n\n项目内容：\n${source.slice(0, 16000)}`;
+        for await (const chunk of aiService.streamGenerate(prompt, {
+          model: 'gpt-5.6-sol',
+          provider: 'openai',
+          signal: controller.signal,
+        })) {
+          if (controller.signal.aborted) break;
+          generated += chunk;
+          setScriptDraft((draft) =>
+            draft?.id === draftId
+              ? {
+                  ...draft,
+                  content: generated,
+                  segments: parseScriptSegments(generated),
+                  updatedAt: new Date().toISOString(),
+                }
+              : draft
+          );
+        }
+        if (!controller.signal.aborted) toast.success('脚本草稿已生成，请确认后保存');
+      } catch (error) {
+        if (controller.signal.aborted) {
+          toast.info('已停止生成，已收到的脚本草稿仍可继续编辑');
+        } else {
+          logger.error('AI 脚本草稿生成失败:', error);
+          toast.error(error instanceof Error ? error.message : 'AI 脚本生成失败');
+        }
+      } finally {
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          setGenerating(false);
+        }
+      }
+    },
+    [project, activeScript, setScriptDraft, setGenerating, controllerRef]
+  );
+}
+
+export function createScriptDraft(projectName: string, content: string): Script {
+  const now = new Date().toISOString();
+  return {
+    id: `draft_${uuidv4()}`,
+    title: `${projectName} AI 脚本草稿`,
+    content,
+    segments: parseScriptSegments(content),
+    createdAt: now,
+    updatedAt: now,
+    modelUsed: 'gpt-5.6-sol',
+  };
+}
+
+export function useHandleConfirmScriptDraft(
+  project: ProjectData | null,
+  draft: Script | null,
+  setProject: React.Dispatch<React.SetStateAction<ProjectData | null>>,
+  setActiveScript: React.Dispatch<React.SetStateAction<Script | null>>,
+  setScriptDraft: React.Dispatch<React.SetStateAction<Script | null>>,
+  updateProject: (id: string, data: ProjectData) => void
+) {
+  return useCallback(() => {
+    if (!project || !draft) return;
+    const confirmedDraft: Script = {
+      ...draft,
+      segments: parseScriptSegments(draft.content),
+      updatedAt: new Date().toISOString(),
+    };
+    const updatedProject: ProjectData = {
+      ...project,
+      scripts: [
+        ...(project.scripts ?? []).filter((script) => script.id !== confirmedDraft.id),
+        confirmedDraft,
+      ],
+      script: confirmedDraft.content,
+      updatedAt: new Date().toISOString(),
+    };
+    setProject(updatedProject);
+    setActiveScript(confirmedDraft);
+    setScriptDraft(null);
+    updateProject(updatedProject.id, updatedProject);
+    tauriService.writeText(updatedProject.id, JSON.stringify(updatedProject)).catch((error) => {
+      logger.error('脚本草稿持久化失败:', error);
+      toast.error('脚本已更新到当前页面，但文件持久化失败');
+    });
+    toast.success('脚本草稿已确认并保存');
+  }, [project, draft, setProject, setActiveScript, setScriptDraft, updateProject]);
+}
+
 /** 脚本内容变更处理 */
 export function useHandleScriptChange(
   project: ProjectData | null,
@@ -176,12 +305,19 @@ export function useHandleScriptChange(
           })),
           updatedAt: new Date().toISOString(),
         };
-        const updatedScripts = (project.scripts ?? []).map((script: Script) =>
-          script.id === activeScript.id ? updatedScript : script
+        const existingScripts = project.scripts ?? [];
+        const containsActiveScript = existingScripts.some(
+          (script) => script.id === activeScript.id
         );
+        const updatedScripts = containsActiveScript
+          ? existingScripts.map((script: Script) =>
+              script.id === activeScript.id ? updatedScript : script
+            )
+          : [...existingScripts, updatedScript];
         const updatedProject = {
           ...project,
           scripts: updatedScripts,
+          script: updatedScript.content,
           updatedAt: new Date().toISOString(),
         };
         setProject(updatedProject);

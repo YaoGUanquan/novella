@@ -24,13 +24,14 @@ import {
   Settings,
 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { hasAnyConfiguredModelProvider } from '@/core/config/model-providers';
 import { agentRegistry } from '@/core/services/agent/AgentRegistry';
 import type { BaseAgent } from '@/core/services/agent/BaseAgent';
 import { MasterDirectorAgent } from '@/core/services/agent/MasterDirectorAgent';
 import type { BlackboardData, InputContentType } from '@/core/services/agent/ProjectBlackboard';
+import { mergeWorkflowResultIntoProject } from '@/features/agent/utils/project-persistence';
 import AgentConfigModal from '@/shared/components/agent/AgentConfigModal';
 import ModelConfigGuardModal from '@/shared/components/model/ModelConfigGuardModal';
 import { Badge } from '@/shared/components/ui/badge';
@@ -39,9 +40,20 @@ import { Textarea } from '@/shared/components/ui/textarea';
 import { toast } from '@/shared/components/ui/toast';
 import { useProjectStore } from '@/shared/stores/project-store';
 
+interface WorkflowLocationState {
+  projectId?: string;
+  isNewProject?: boolean;
+  sampleContent?: string;
+  sampleTitle?: string;
+}
+
 export const MultiAgentStudio: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const store = useProjectStore();
+  const workflowState = (location.state as WorkflowLocationState | null) ?? null;
+  const queryProjectId = new URLSearchParams(location.search).get('projectId') || undefined;
+  const workflowProjectId = workflowState?.projectId || queryProjectId;
 
   const [rawInput, setRawInput] = useState<string>('');
   const [inputType, setInputType] = useState<InputContentType>('novel_text');
@@ -140,7 +152,18 @@ export const MultiAgentStudio: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const targetProject = store.createProject(projectPayload as any);
+    const routeProject = workflowProjectId
+      ? store.projects.find((project) => project.id === workflowProjectId) ||
+        (store.currentProject?.id === workflowProjectId ? store.currentProject : null)
+      : null;
+    const existingProject =
+      routeProject || (!workflowState?.isNewProject ? store.currentProject : null);
+    const mergedProject = mergeWorkflowResultIntoProject(existingProject, projectPayload as any);
+    const targetProject = mergedProject || store.createProject(projectPayload as any);
+
+    if (mergedProject && existingProject) {
+      store.updateProject(existingProject.id, mergedProject);
+    }
     store.setCurrentProject(targetProject);
     toast.success('🎉 已无缝打通多智能体推导数据，直接进入分镜编辑器！');
     navigate(`/project/edit/${targetProject.id}?step=1`);
@@ -306,7 +329,9 @@ export const MultiAgentStudio: React.FC = () => {
                     </p>
                     <div className="flex items-center justify-between text-[9px] font-mono pt-1.5 border-t border-slate-800 text-slate-400">
                       <span>Phase:</span>
-                      <span className="text-[#00f5d4] font-bold">{agent.metadata.triggerPhase.split('_')[1]}</span>
+                      <span className="text-[#00f5d4] font-bold">
+                        {agent.metadata.triggerPhase.split('_')[1]}
+                      </span>
                     </div>
                   </div>
                 );
@@ -329,9 +354,21 @@ export const MultiAgentStudio: React.FC = () => {
             <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono space-y-2 h-44 overflow-y-auto">
               {blackboardData.logs.map((log, idx) => (
                 <div key={idx} className="flex items-start gap-2 leading-relaxed">
-                  <span className="text-slate-500 text-[10px]">[{log.timestamp.slice(11, 19)}]</span>
-                  <span className="text-[#00f5d4] font-bold min-w-[110px]">[{log.agentName.split(' ')[0]}]</span>
-                  <span className={log.level === 'error' ? 'text-rose-400 font-bold' : log.level === 'success' ? 'text-emerald-400 font-bold' : 'text-slate-300'}>
+                  <span className="text-slate-500 text-[10px]">
+                    [{log.timestamp.slice(11, 19)}]
+                  </span>
+                  <span className="text-[#00f5d4] font-bold min-w-[110px]">
+                    [{log.agentName.split(' ')[0]}]
+                  </span>
+                  <span
+                    className={
+                      log.level === 'error'
+                        ? 'text-rose-400 font-bold'
+                        : log.level === 'success'
+                          ? 'text-emerald-400 font-bold'
+                          : 'text-slate-300'
+                    }
+                  >
                     {log.action}
                   </span>
                 </div>
@@ -341,10 +378,7 @@ export const MultiAgentStudio: React.FC = () => {
         </div>
       </div>
 
-      <ModelConfigGuardModal
-        isOpen={isModelGuardOpen}
-        onClose={() => setIsModelGuardOpen(false)}
-      />
+      <ModelConfigGuardModal isOpen={isModelGuardOpen} onClose={() => setIsModelGuardOpen(false)} />
 
       <AgentConfigModal
         open={isAgentConfigModalOpen}

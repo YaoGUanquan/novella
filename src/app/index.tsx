@@ -12,10 +12,12 @@ import AppProvider from '@/app/providers/AppProvider';
 import { getPageImporters, preloadPage } from '@/app/router/page-preload';
 import { runWhenIdle } from '@/core/utils/idle';
 import { logger } from '@/core/utils/logger';
+import AICreateProjectModal from '@/features/project/components/AICreateProjectModal';
 import { tauriService } from '@/infrastructure/tauri-bridge/commands';
 import HomePage from '@/pages/home/HomePage';
 import { AppLayout } from '@/shared/components/layout';
 import { toast, notify } from '@/shared/components/ui/toast';
+import { TooltipProvider } from '@/shared/components/ui/tooltip';
 
 const importers = getPageImporters();
 // 懒加载次要页面组件
@@ -83,7 +85,7 @@ function RouteErrorBoundary() {
 // 路由包装组件：统一 AppLayout + Suspense fallback
 function AppRoute({ page: Page }: { page: React.ComponentType }) {
   return (
-    <AppLayout>
+    <AppLayout CreateProjectModalComponent={AICreateProjectModal}>
       <Suspense fallback={<PageLoader />}>
         <Page />
       </Suspense>
@@ -186,8 +188,10 @@ const App = () => {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <Toaster position="bottom-right" richColors closeButton />
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <Toaster position="bottom-right" richColors closeButton />
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </AppProvider>
     </ErrorBoundary>
   );

@@ -126,7 +126,11 @@ export const ProjectEditPage = () => {
   );
 
   return (
-    <ProjectEditProvider projectMetadata={projectMetadata} initialData={loaderData}>
+    <ProjectEditProvider
+      projectId={projectId}
+      projectMetadata={projectMetadata}
+      initialData={loaderData}
+    >
       <ProjectEdit />
     </ProjectEditProvider>
   );

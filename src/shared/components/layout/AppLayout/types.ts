@@ -9,6 +9,11 @@ export interface AppLayoutProps {
   sidebar?: React.ReactNode;
   /** Footer slot - rendered at the bottom */
   footer?: React.ReactNode;
+  /** Feature-owned implementation used by the global create-project entry. */
+  CreateProjectModalComponent?: React.ComponentType<{
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+  }>;
 }
 
 /**

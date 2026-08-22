@@ -1,11 +1,3 @@
-/**
- * 协作面板：镜头评论 + 版本管理
- * 用于 Step 3 分镜设计
- *
- * 通过 useCollaborationContext() 获取所需的 state + actions，
- * 不再依赖父组件层层传递 props。
- */
-
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,34 +10,10 @@ import {
 } from '@/components/ui/select';
 import { collaborationService } from '@/core/services';
 import type { FrameComment } from '@/core/services';
-import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 
-import { useProjectEdit } from '../context/ProjectEditContext';
 import { useCollaborationContext } from '../context/selectors';
 import styles from '../ProjectEdit.module.less';
 
-export interface CollaborationPanelProps {
-  projectId?: string;
-  selectedFrame?: StoryboardFrame | null;
-  commentDraft?: string;
-  versionLabel?: string;
-  compareLeftVersionId?: string;
-  compareRightVersionId?: string;
-  versionDiff?: import('@/core/services/domain/collaboration-service').VersionDiffSummary | null;
-  storyboardVersions?: import('@/core/services/domain/collaboration-service').StoryboardVersion[];
-  onCommentDraftChange?: (v: string) => void;
-  onAddComment?: () => void;
-  onSaveVersion?: () => void;
-  onCompareVersions?: () => void;
-  onRollback?: () => void;
-  onLeftVersionChange?: (v: string | undefined) => void;
-  onRightVersionChange?: (v: string | undefined) => void;
-  onVersionLabelChange?: (v: string) => void;
-}
-
-/**
- * 通用版本 Select — 消除 CollaborationPanel 内版本 A/B 两个 Select 的 11L 模板重复。
- */
 function VersionSelect({
   value,
   onValueChange,
@@ -53,7 +21,7 @@ function VersionSelect({
   versions,
 }: {
   value: string | undefined;
-  onValueChange: (v: string) => void;
+  onValueChange: (value: string) => void;
   placeholder: string;
   versions: ReadonlyArray<{ id: string; label: string }>;
 }) {
@@ -63,9 +31,9 @@ function VersionSelect({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {versions.map((v) => (
-          <SelectItem key={v.id} value={v.id}>
-            {v.label}
+        {versions.map((version) => (
+          <SelectItem key={version.id} value={version.id}>
+            {version.label}
           </SelectItem>
         ))}
       </SelectContent>
@@ -75,6 +43,7 @@ function VersionSelect({
 
 function CollaborationPanel() {
   const {
+    projectId,
     commentDraft,
     versionLabel,
     selectedFrame,
@@ -91,21 +60,19 @@ function CollaborationPanel() {
     onRightVersionChange,
     onVersionLabelChange,
   } = useCollaborationContext();
-  const { state } = useProjectEdit();
-
-  const projectId = state ? undefined : undefined; // projectId 不再需要，collaborationService 内部处理
   const comments = projectId ? collaborationService.listComments(projectId, selectedFrame?.id) : [];
 
   return (
     <div className={styles.collaborationPanel}>
-      {/* 镜头评论 */}
-      <div className={styles.collabSection}>
-        <h5 className="font-semibold mb-3">镜头评论</h5>
-        <div className="flex gap-2 mb-3">
+      <section className={styles.collabSection}>
+        <h5 className="mb-3 font-semibold">镜头评论</h5>
+        <div className="mb-3 flex gap-2">
           <Input
             value={commentDraft}
-            onChange={(e) => onCommentDraftChange(e.target.value)}
-            placeholder={selectedFrame ? `对 ${selectedFrame.title} 添加评论` : '先选中一个分镜'}
+            onChange={(event) => onCommentDraftChange(event.target.value)}
+            placeholder={
+              selectedFrame ? `为「${selectedFrame.title}」添加评论` : '请先选择一个分镜'
+            }
             disabled={!selectedFrame}
           />
           <Button
@@ -118,10 +85,10 @@ function CollaborationPanel() {
         </div>
         <div className="space-y-2">
           {comments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无评论</p>
+            <p className="text-sm text-muted-foreground">当前镜头暂无评论</p>
           ) : (
             comments.map((item: FrameComment) => (
-              <div key={item.id} className="p-2 border rounded-md">
+              <div key={item.id} className="rounded-md border p-2">
                 <div className="text-sm">{item.content}</div>
                 <span className="text-xs text-muted-foreground">
                   {new Date(item.createdAt).toLocaleString()}
@@ -130,41 +97,40 @@ function CollaborationPanel() {
             ))
           )}
         </div>
-      </div>
+      </section>
 
-      {/* 版本管理 */}
-      <div className={styles.collabSection}>
-        <h5 className="font-semibold mb-3">版本管理</h5>
-        <div className="flex gap-2 mb-3 flex-wrap">
+      <section className={styles.collabSection}>
+        <h5 className="mb-3 font-semibold">版本管理</h5>
+        <div className="mb-3 flex flex-wrap gap-2">
           <Input
             value={versionLabel}
-            onChange={(e) => onVersionLabelChange(e.target.value)}
+            onChange={(event) => onVersionLabelChange(event.target.value)}
             placeholder="版本标签（可选）"
             className="w-[220px]"
-            onKeyDown={(e) => e.key === 'Enter' && onSaveVersion()}
+            onKeyDown={(event) => event.key === 'Enter' && onSaveVersion()}
           />
           <Button variant="outline" onClick={onSaveVersion}>
             保存快照
           </Button>
         </div>
-        <div className="flex gap-2 mb-3 flex-wrap">
+        <div className="mb-3 flex flex-wrap gap-2">
           <VersionSelect
             value={compareLeftVersionId}
-            onValueChange={(v) => onLeftVersionChange(v)}
-            placeholder="选择版本A"
+            onValueChange={onLeftVersionChange}
+            placeholder="选择版本 A"
             versions={storyboardVersions}
           />
           <VersionSelect
             value={compareRightVersionId}
-            onValueChange={(v) => onRightVersionChange(v)}
-            placeholder="选择版本B"
+            onValueChange={onRightVersionChange}
+            placeholder="选择版本 B"
             versions={storyboardVersions}
           />
           <Button variant="outline" onClick={onCompareVersions}>
-            版本差异
+            比较版本
           </Button>
           <Button variant="destructive" onClick={onRollback}>
-            回滚到版本A
+            回滚到版本 A
           </Button>
         </div>
         {versionDiff && (
@@ -172,15 +138,15 @@ function CollaborationPanel() {
             variant="default"
             className={
               versionDiff.changeCount > 0
-                ? 'bg-blue-50 border-blue-200'
-                : 'bg-green-50 border-green-200'
+                ? 'border-blue-200 bg-blue-50'
+                : 'border-green-200 bg-green-50'
             }
           >
-            <p className="font-medium">差异字段数: {versionDiff.changeCount}</p>
+            <p className="font-medium">差异字段数：{versionDiff.changeCount}</p>
             <p className="text-sm">{versionDiff.changedKeys.slice(0, 6).join(', ') || '无差异'}</p>
           </Alert>
         )}
-      </div>
+      </section>
     </div>
   );
 }

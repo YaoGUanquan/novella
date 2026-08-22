@@ -10,4 +10,5 @@ export interface StoryboardFrame {
   dialogue: string;
   duration: number;
   imageUrl?: string;
+  videoUrl?: string;
 }

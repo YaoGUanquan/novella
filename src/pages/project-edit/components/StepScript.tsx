@@ -1,155 +1,189 @@
-/**
- * Step 3: 剧本镜头拆解与切分工坊 (StepScript)
- * Cyber Midnight 极客镜头切分与运镜/构图 Preset 交互
- */
-
-import { Film, Sparkles, Plus, Trash2, ArrowRight, ArrowLeft, Video, Camera } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, Film, Plus, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 
+import { toast } from '@/components/ui/toast';
 import { useProject } from '@/core/hooks/useProject';
+import { AICreativeAssistantSheet } from '@/features/creative-assistant';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Card } from '@/shared/components/ui/card';
 import { Input } from '@/shared/components/ui/input';
 
-const INITIAL_SHOTS = [
-  {
-    id: 'shot-1',
-    camera: '特写 (Close-up)',
-    composition: '中心构图',
-    character: '萧炎',
-    dialogue: '“三十年河东，三十年河西，莫欺少年穷！”',
-    prompt:
-      'masterpiece, 8k, xianxia anime style, close-up shot, 1person, Xiao Yan, angry expression, highly detailed face',
-  },
-  {
-    id: 'shot-2',
-    camera: '全景 (Wide)',
-    composition: '三分法',
-    character: '无',
-    dialogue: '',
-    prompt:
-      'masterpiece, 8k, wide panoramic establishing shot, ancient sect hall, stormy sky, dramatic lighting',
-  },
-  {
-    id: 'shot-3',
-    camera: '中景 (Medium)',
-    composition: '黄金螺旋',
-    character: '药老',
-    dialogue: '“好小子，有老夫当年的脾气！”',
-    prompt:
-      'masterpiece, 8k, medium shot, Yao Lao, old floating spirit, smiling, glowing eyes, ethereal aura',
-  },
-];
+import { useProjectEdit } from '../context/ProjectEditContext';
+import { useStepStoryboardContext } from '../context/selectors';
+
+type ShotDraft = {
+  id: string;
+  camera: string;
+  composition: string;
+  character: string;
+  dialogue: string;
+  prompt: string;
+};
+
+function parseShotDrafts(response: string): ShotDraft[] {
+  const start = response.indexOf('[');
+  const end = response.lastIndexOf(']');
+  if (start < 0 || end <= start) throw new Error('AI 回复尚未包含完整分镜 JSON');
+  const parsed = JSON.parse(response.slice(start, end + 1)) as Array<Partial<ShotDraft>>;
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('AI 未返回可用分镜');
+  return parsed.map((item, index) => ({
+    id: `shot-${Date.now()}-${index}`,
+    camera: item.camera ?? 'Medium',
+    composition: item.composition ?? 'rule of thirds',
+    character: item.character ?? '',
+    dialogue: item.dialogue ?? '',
+    prompt: item.prompt ?? '',
+  }));
+}
 
 function StepScript() {
-  const { setCurrentStep } = useProject();
-  const [shots, setShots] = useState(INITIAL_SHOTS);
+  const { project, setCurrentStep } = useProject();
+  const { state } = useProjectEdit();
+  const { onFramesChange, onSaveProject } = useStepStoryboardContext();
+  const [shots, setShots] = useState<ShotDraft[]>([]);
 
-  const handleAddShot = () => {
-    const newS = {
-      id: `shot-${shots.length + 1}`,
-      camera: '中景 (Medium)',
-      composition: '三分法',
-      character: '未知角色',
-      dialogue: '',
-      prompt: 'masterpiece, 8k, anime style, highly detailed',
-    };
-    setShots([...shots, newS]);
-  };
+  const updateShot = (id: string, patch: Partial<ShotDraft>) =>
+    setShots((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const handleAddShot = () =>
+    setShots((items) => [
+      ...items,
+      {
+        id: `shot-${Date.now()}`,
+        camera: 'Medium',
+        composition: 'rule of thirds',
+        character: '',
+        dialogue: '',
+        prompt: '',
+      },
+    ]);
 
-  const handleDeleteShot = (id: string) => {
-    setShots(shots.filter((s) => s.id !== id));
+  const handleConfirmShots = async () => {
+    if (shots.length === 0) return toast.warning('请先完成 AI 分镜生成');
+    onFramesChange(
+      shots.map((shot, index) => ({
+        id: shot.id,
+        title: `分镜 ${index + 1}`,
+        sceneDescription: shot.prompt,
+        composition: shot.composition,
+        cameraType: shot.camera,
+        dialogue: shot.dialogue,
+        duration: 5,
+      }))
+    );
+    if (await onSaveProject()) toast.success('分镜草稿已写入当前项目');
   };
 
   return (
     <div className="space-y-6">
-      <Card className="bg-slate-900/90 border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
+      <Card className="relative space-y-4 rounded-2xl border-slate-800 bg-slate-900/90 p-6 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-              <Film className="w-6 h-6" />
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/15 p-2.5 text-indigo-400">
+              <Film className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-100 m-0">
-                Step 3: 剧本镜头拆解与运镜标注
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                将文本剧本自动按运镜逻辑拆分为独立镜头 (Shot)，标注景别、构图法则与提示词 Prompt
+              <h3 className="m-0 text-lg font-bold text-slate-100">脚本与分镜草稿</h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                AI 会流式返回分镜草稿，确认后才进入后续图片和视频流程。
               </p>
             </div>
           </div>
-          <Button
-            variant="primary"
-            onClick={handleAddShot}
-            className="gap-1.5 shadow-lg shadow-indigo-500/20"
-          >
-            <Plus className="w-4 h-4" /> 添加新镜头
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={handleAddShot}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              添加镜头
+            </Button>
+          </div>
         </div>
-
-        {/* 镜头拆解列表 */}
-        <div className="space-y-3">
-          {shots.map((shot, index) => (
-            <div
-              key={shot.id}
-              className="bg-slate-950 p-4 rounded-xl border border-slate-800 hover:border-indigo-500/40 transition-all space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-indigo-500/20 text-indigo-300 border-indigo-500/30 font-mono text-[11px]">
-                    SHOT #{index + 1}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">
-                    <Camera className="w-3 h-3 mr-1 text-indigo-400" />
-                    {shot.camera}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-300">
-                    {shot.composition}
-                  </Badge>
+        <AICreativeAssistantSheet
+          projectId={project?.id ?? state.projectId}
+          targetLabel="分镜草稿"
+          projectContext={[
+            `项目名称：${project?.name ?? state.projectName ?? '未命名项目'}`,
+            `项目简介：${project?.description ?? state.projectDescription ?? '未填写'}`,
+            `视觉画风：${project?.artStyle ?? '未设置'}`,
+            `目标画幅：${project?.aspectRatio ?? '未设置'}`,
+            `项目正文：\n${state.content}`,
+            state.characters.length
+              ? `已确认角色：\n${JSON.stringify(state.characters)}`
+              : '已确认角色：暂无',
+          ].join('\n\n')}
+          candidateInstructions={
+            '只返回 3-12 个分镜的 JSON 数组，每项必须包含 camera、composition、character、dialogue、prompt；不要使用 Markdown 代码块。'
+          }
+          parseCandidate={parseShotDrafts}
+          onApply={setShots}
+        />
+        {shots.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/60 p-8 text-center text-sm text-slate-400">
+            尚无分镜草稿，请使用对话 AI 生成。
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {shots.map((shot, index) => (
+              <div
+                key={shot.id}
+                className="space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge className="border-indigo-500/30 bg-indigo-500/20 text-indigo-300">
+                      SHOT #{index + 1}
+                    </Badge>
+                    <Badge variant="outline" className="border-slate-700 text-slate-300">
+                      <Camera className="mr-1 h-3 w-3" />
+                      {shot.camera}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShots((items) => items.filter((item) => item.id !== shot.id))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteShot(shot.id)}
-                  className="text-slate-500 hover:text-rose-400"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* 台词与 Prompt 编辑 */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">角色台词 / 独白</label>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <Input
-                    defaultValue={shot.dialogue}
-                    placeholder="输入对白或旁白字幕..."
-                    className="bg-slate-900 border-slate-800 text-slate-200 text-xs"
+                    value={shot.dialogue}
+                    onChange={(event) => updateShot(shot.id, { dialogue: event.target.value })}
+                    placeholder="对白或旁白"
+                  />
+                  <Input
+                    value={shot.prompt}
+                    onChange={(event) => updateShot(shot.id, { prompt: event.target.value })}
+                    placeholder="画面生成提示词"
+                  />
+                  <Input
+                    value={shot.camera}
+                    onChange={(event) => updateShot(shot.id, { camera: event.target.value })}
+                    placeholder="镜头类型"
+                  />
+                  <Input
+                    value={shot.character}
+                    onChange={(event) => updateShot(shot.id, { character: event.target.value })}
+                    placeholder="出场角色"
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">
-                    AI 画面渲染 Prompt
-                  </label>
-                  <Input
-                    defaultValue={shot.prompt}
-                    className="bg-slate-900 border-slate-800 text-indigo-300 text-xs font-mono"
-                  />
-                </div>
               </div>
+            ))}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => void handleConfirmShots()}>
+                <Check className="mr-1.5 h-4 w-4" />
+                确认并写入分镜
+              </Button>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </Card>
-
-      {/* 导航导航 */}
-      <div className="flex justify-between items-center pt-2">
-        <Button variant="outline" onClick={() => setCurrentStep(1)} className="gap-1.5">
-          <ArrowLeft className="w-4 h-4" /> 上一步: 角色分析
+      <div className="flex items-center justify-between pt-2">
+        <Button variant="outline" onClick={() => setCurrentStep(1)}>
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          上一步
         </Button>
-        <Button variant="primary" onClick={() => setCurrentStep(3)} className="gap-1.5">
-          下一步: 漫剧分镜绘制 <ArrowRight className="w-4 h-4" />
+        <Button variant="primary" onClick={() => setCurrentStep(3)}>
+          下一步 <ArrowRight className="ml-1.5 h-4 w-4" />
         </Button>
       </div>
     </div>

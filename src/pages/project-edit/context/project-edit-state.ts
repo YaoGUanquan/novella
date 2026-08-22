@@ -7,6 +7,9 @@ import type { ScriptImportMetadata } from '@/features/storyboard/components/Nove
 
 /** ProjectEditProvider 管理的页面级状态。 */
 export interface ProjectEditState {
+  projectId?: string;
+  projectName: string;
+  projectDescription: string;
   // 内容 / 分析
   content: string;
   novelMetadata: ScriptImportMetadata | null;
@@ -56,7 +59,7 @@ export interface ProjectEditActions {
   generateVoices: () => Promise<void>;
   setAudioConfig: (config: AudioTrackConfig) => void;
   // 导出 / 保存
-  saveProject: () => Promise<void>;
+  saveProject: (overrides?: { characters?: Character[] }) => Promise<boolean>;
   exportReviewNotes: () => Promise<void>;
   locateIssueFrame: (issue: QualityGateIssue) => void;
   // 剧本
@@ -73,6 +76,9 @@ export interface ProjectEditContextValue {
 }
 
 export const initialProjectEditState: ProjectEditState = {
+  projectId: undefined,
+  projectName: '',
+  projectDescription: '',
   content: '',
   novelMetadata: null,
   loading: false,

@@ -192,7 +192,15 @@ export function useAudioEditor({
   );
 
   // ========== 副作用：同步配置到父组件 ==========
+  const lastEmittedConfigRef = useRef<string | null>(null);
   useEffect(() => {
+    const serializedConfig = JSON.stringify(audioConfig);
+    if (lastEmittedConfigRef.current === null) {
+      lastEmittedConfigRef.current = serializedConfig;
+      return;
+    }
+    if (lastEmittedConfigRef.current === serializedConfig) return;
+    lastEmittedConfigRef.current = serializedConfig;
     onConfigChange?.(audioConfig);
   }, [audioConfig, onConfigChange]);
 

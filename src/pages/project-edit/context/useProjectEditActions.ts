@@ -13,7 +13,6 @@ import type { AudioTrackConfig } from '@/core/audio/types/audio';
 import type { CompositionProject } from '@/core/audio/types/composition';
 import type { Character, StoryAnalysis } from '@/core/script/types/novel';
 import {
-  aiService,
   audioPipelineService,
   collaborationService,
   costService,
@@ -25,7 +24,7 @@ import type { QualityGateIssue } from '@/core/services';
 import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 import { logger } from '@/core/utils/logger';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
-import { type StoryboardState } from '@/stores/storyboard/storyboard-store';
+import { type StoryboardState, useStoryboard } from '@/stores/storyboard/storyboard-store';
 
 import { initialProjectEditState, type ProjectEditActions } from './project-edit-state';
 
@@ -103,9 +102,6 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
 
   // scriptText bridge for useScriptStep
   const scriptTextRef = useRef('');
-  const setScriptTextBridge = useCallback((text: string) => {
-    scriptTextRef.current = text;
-  }, []);
 
   // ─── Content ──────────────────────────────────────────────────────────────
   const loadContent = useCallback(
@@ -200,17 +196,30 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
       const parsed = JSON.parse(params.analysisDraft) as StoryAnalysis;
       setStoryAnalysis(parsed);
       setAnalysisState('accepted');
+      if (parsed.characters?.length && characters.length === 0) {
+        const now = new Date().toISOString();
+        setCharacters(
+          parsed.characters.map((character, index) => ({
+            id: `character_${Date.now()}_${index}`,
+            name: character.name,
+            role:
+              character.role === 'main'
+                ? 'protagonist'
+                : character.role === 'minor'
+                  ? 'minor'
+                  : 'supporting',
+            description: character.traits.join('、'),
+            personality: character.traits.join('、'),
+            createdAt: now,
+            updatedAt: now,
+          }))
+        );
+      }
       if (storyboard.frames.length === 0) {
         storyboard.setFrames(buildStoryboardDraft(parsed));
       }
-      setLoading(true);
-      toast.info('正在根据解析结果生成剧本...');
-      const generatedScript = await aiService.generate(
-        `请基于以下故事结构生成适合视频脚本制作的剧本：\n\n${JSON.stringify(parsed, null, 2)}\n\n要求：按场景输出，包含旁白、对白、动作描述。`,
-        { model: 'gpt-4', provider: 'openai' }
-      );
-      setScriptTextBridge(generatedScript);
-      toast.success('剧本生成完成');
+      if (project?.id) updateProject({ id: project.id, storyAnalysis: parsed });
+      toast.success('分析结果已应用，请在下一步生成并确认分镜草稿');
       startTransition(() => setCurrentStep(2));
     } catch (error) {
       logger.error('接受解析结果失败:', error);
@@ -218,12 +227,21 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
       if (msg.includes('JSON') || msg.includes('parse')) {
         toast.error('解析 JSON 格式无效，请修正后重试');
       } else {
-        toast.error(`生成剧本失败: ${msg}`);
+        toast.error(`应用分析结果失败: ${msg}`);
       }
     } finally {
       setLoading(false);
     }
-  }, [params.analysisDraft, storyboard, buildStoryboardDraft, setCurrentStep, setScriptTextBridge]);
+  }, [
+    params.analysisDraft,
+    storyboard,
+    buildStoryboardDraft,
+    setCurrentStep,
+    characters,
+    setCharacters,
+    project?.id,
+    updateProject,
+  ]);
 
   // ─── Storyboard Collaboration ─────────────────────────────────────────────
   const addFrameComment = useCallback(() => {
@@ -242,14 +260,14 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
     if (!project?.id) return;
     collaborationService.saveVersion({
       projectId: project.id,
-      label: params.versionLabel.trim() ?? `版本-${new Date().toLocaleString()}`,
+      label: params.versionLabel.trim() || `版本-${new Date().toLocaleString()}`,
       createdBy: 'current-user',
       payload: storyboard.frames,
     });
-    const versions = collaborationService.listVersions(project.id);
+    const versions = collaborationService.listVersionsByType(project.id, 'storyboard');
     storyboard.setVersions(versions);
     setVersionLabel('');
-    storyboard.setCompareLeft(versions[versions.length - 1]?.id);
+    storyboard.setCompareLeft(versions[0]?.id);
     toast.success('已保存分镜版本快照');
   }, [project?.id, params.versionLabel, storyboard]);
 
@@ -372,59 +390,71 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
   }, [storyAnalysis, project?.id]);
 
   // ─── Save / Export ────────────────────────────────────────────────────────
-  const saveProject = useCallback(async () => {
-    try {
-      if (!projectMetadata.name.trim()) {
-        toast.error('请填写项目名称');
-        return;
+  const saveProject = useCallback(
+    async (overrides?: { characters?: Character[] }) => {
+      try {
+        if (!projectMetadata.name.trim()) {
+          toast.error('请填写项目名称');
+          return false;
+        }
+        if (!content) {
+          toast.error('请先导入小说/剧本内容');
+          return false;
+        }
+        setSaving(true);
+        const now = new Date().toISOString();
+        // Zustand applies setFrames synchronously. Read its latest snapshot so a
+        // just-confirmed storyboard draft is persisted in this same action.
+        const persistedStoryboardFrames = useStoryboard.getState().frames;
+        const projectData = {
+          id: project?.id ?? uuidv4(),
+          name: projectMetadata.name.trim(),
+          description: projectMetadata.description.trim(),
+          content: content,
+          createdAt: project?.createdAt ?? now,
+          updatedAt: now,
+          novelMetadata: novelMetadata ?? undefined,
+          storyAnalysis: storyAnalysis ?? undefined,
+          storyboardFrames:
+            persistedStoryboardFrames.length > 0 ? persistedStoryboardFrames : undefined,
+          storyboardComments: storyboard.comments.length > 0 ? storyboard.comments : undefined,
+          storyboardVersions: storyboard.versions.length > 0 ? storyboard.versions : undefined,
+          characters:
+            (overrides?.characters ?? characters).length > 0
+              ? (overrides?.characters ?? characters)
+              : undefined,
+          composition: composition ?? undefined,
+          audioConfig: audioConfig,
+          exportPreset: projectMetadata.exportPreset,
+          exportSettings: projectMetadata.exportSettings,
+          script: scriptTextRef.current || undefined,
+        };
+        await tauriService.saveProjectFile(projectData.id, JSON.stringify(projectData));
+        toast.success('项目保存成功');
+        updateProject(projectData as Parameters<typeof updateProject>[0]);
+        return true;
+      } catch (error) {
+        logger.error('保存项目失败:', error);
+        toast.error('保存项目失败，请稍后再试');
+        return false;
+      } finally {
+        setSaving(false);
       }
-      if (!content) {
-        toast.error('请先导入小说/剧本内容');
-        return;
-      }
-      setSaving(true);
-      const now = new Date().toISOString();
-      const projectData = {
-        id: project?.id ?? uuidv4(),
-        name: projectMetadata.name.trim(),
-        description: projectMetadata.description.trim(),
-        content: content,
-        createdAt: project?.createdAt ?? now,
-        updatedAt: now,
-        novelMetadata: novelMetadata ?? undefined,
-        storyAnalysis: storyAnalysis ?? undefined,
-        storyboardFrames: storyboard.frames.length > 0 ? storyboard.frames : undefined,
-        storyboardComments: storyboard.comments.length > 0 ? storyboard.comments : undefined,
-        storyboardVersions: storyboard.versions.length > 0 ? storyboard.versions : undefined,
-        characters: characters.length > 0 ? characters : undefined,
-        composition: composition ?? undefined,
-        audioConfig: audioConfig,
-        exportPreset: projectMetadata.exportPreset,
-        exportSettings: projectMetadata.exportSettings,
-        script: scriptTextRef.current || undefined,
-      };
-      await tauriService.saveProjectFile(projectData.id, JSON.stringify(projectData));
-      toast.success('项目保存成功');
-      updateProject(projectData as Parameters<typeof updateProject>[0]);
-    } catch (error) {
-      logger.error('保存项目失败:', error);
-      toast.error('保存项目失败，请稍后再试');
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    content,
-    project,
-    projectMetadata,
-    novelMetadata,
-    storyAnalysis,
-    storyboard,
-    characters,
-    composition,
-    audioConfig,
-    setSaving,
-    updateProject,
-  ]);
+    },
+    [
+      content,
+      project,
+      projectMetadata,
+      novelMetadata,
+      storyAnalysis,
+      storyboard,
+      characters,
+      composition,
+      audioConfig,
+      setSaving,
+      updateProject,
+    ]
+  );
 
   const exportReviewNotes = useCallback(async () => {
     if (!project?.id) {

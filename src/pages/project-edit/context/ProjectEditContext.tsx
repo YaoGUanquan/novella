@@ -6,12 +6,23 @@
  * and exposes the context value.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState, useTransition } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 
 import type { AudioTrackConfig } from '@/core/audio/types/audio';
 import type { CompositionProject } from '@/core/audio/types/composition';
 import { useProject } from '@/core/hooks/useProject';
 import type { Character, StoryAnalysis } from '@/core/script/types/novel';
+import { collaborationService } from '@/core/services';
+import type { FrameComment, StoryboardVersion } from '@/core/services/domain/collaboration-service';
+import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
 import { useStoryboard } from '@/stores/storyboard/storyboard-store';
 
@@ -39,6 +50,7 @@ export interface ProviderProps {
     exportSettings: Record<string, unknown>;
   };
   initialFocusFrameId?: string;
+  projectId?: string;
   initialData?: {
     content?: string;
     novelMetadata?: ScriptImportMetadata | null;
@@ -47,6 +59,9 @@ export interface ProviderProps {
     characters?: Character[];
     composition?: CompositionProject | null;
     script?: string;
+    storyboardFrames?: unknown[];
+    storyboardComments?: unknown[];
+    storyboardVersions?: unknown[];
     initialStep?: number;
   } | null;
 }
@@ -55,11 +70,19 @@ export function ProjectEditProvider({
   children,
   projectMetadata,
   initialFocusFrameId,
+  projectId,
   initialData,
 }: ProviderProps) {
   const [, startTransition] = useTransition();
   const { project, setSaving, setCurrentStep, updateProject } = useProject();
   const storyboard = useStoryboard();
+  const {
+    setComments: setStoryboardComments,
+    setFrames: setStoryboardFrames,
+    setVersions: setStoryboardVersions,
+  } = storyboard;
+  const effectiveProjectId = project?.id ?? projectId;
+  const hydratedDataKeyRef = useRef<string | null>(null);
 
   // ─── State ────────────────────────────────────────────────────────────────
   const [content, setContent] = useState(initialData?.content ?? initialProjectEditState.content);
@@ -99,6 +122,15 @@ export function ProjectEditProvider({
   // 动态同步异步加载的项目数据与指定初始步骤 (Step 0 -> Step 3)
   useEffect(() => {
     if (initialData) {
+      const dataKey = [
+        effectiveProjectId ?? '',
+        initialData.content ?? '',
+        initialData.storyboardFrames?.length ?? 0,
+        initialData.storyboardComments?.length ?? 0,
+        initialData.storyboardVersions?.length ?? 0,
+      ].join(':');
+      if (hydratedDataKeyRef.current === dataKey) return;
+      hydratedDataKeyRef.current = dataKey;
       if (initialData.content) {
         setContent(initialData.content);
       }
@@ -108,11 +140,27 @@ export function ProjectEditProvider({
       if (initialData.characters && initialData.characters.length > 0) {
         setCharacters(initialData.characters);
       }
+      const frames = asStoryboardFrames(initialData.storyboardFrames);
+      const comments = asFrameComments(initialData.storyboardComments);
+      const versions = asStoryboardVersions(initialData.storyboardVersions);
+      setStoryboardFrames(frames);
+      setStoryboardComments(comments);
+      setStoryboardVersions(versions);
+      if (effectiveProjectId) {
+        collaborationService.hydrate(effectiveProjectId, comments, versions);
+      }
       if (typeof initialData.initialStep === 'number') {
         setCurrentStep(initialData.initialStep);
       }
     }
-  }, [initialData, setCurrentStep]);
+  }, [
+    effectiveProjectId,
+    initialData,
+    setCurrentStep,
+    setStoryboardComments,
+    setStoryboardFrames,
+    setStoryboardVersions,
+  ]);
 
   // ─── Actions (extracted) ─────────────────────────────────────────────────
   const actions = useProjectEditActions({
@@ -149,6 +197,9 @@ export function ProjectEditProvider({
   });
 
   const state = {
+    projectId: effectiveProjectId,
+    projectName: projectMetadata.name,
+    projectDescription: projectMetadata.description,
     content,
     novelMetadata,
     loading,
@@ -168,4 +219,51 @@ export function ProjectEditProvider({
   const value = useMemo(() => ({ state, actions }), [state, actions]);
 
   return <ProjectEditContext.Provider value={value}>{children}</ProjectEditContext.Provider>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function asStoryboardFrames(value: unknown[] | undefined): StoryboardFrame[] {
+  return (value ?? []).flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== 'string' || typeof item.title !== 'string') return [];
+    return [
+      {
+        id: item.id,
+        title: item.title,
+        sceneDescription: typeof item.sceneDescription === 'string' ? item.sceneDescription : '',
+        composition: typeof item.composition === 'string' ? item.composition : '',
+        cameraType: typeof item.cameraType === 'string' ? item.cameraType : '',
+        dialogue: typeof item.dialogue === 'string' ? item.dialogue : '',
+        duration:
+          typeof item.duration === 'number' && Number.isFinite(item.duration) ? item.duration : 5,
+        imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : undefined,
+        videoUrl: typeof item.videoUrl === 'string' ? item.videoUrl : undefined,
+      },
+    ];
+  });
+}
+
+function asFrameComments(value: unknown[] | undefined): FrameComment[] {
+  return (value ?? []).filter(
+    (item): item is FrameComment =>
+      isRecord(item) &&
+      typeof item.id === 'string' &&
+      typeof item.projectId === 'string' &&
+      typeof item.frameId === 'string' &&
+      typeof item.content === 'string' &&
+      typeof item.createdAt === 'string'
+  );
+}
+
+function asStoryboardVersions(value: unknown[] | undefined): StoryboardVersion[] {
+  return (value ?? []).filter(
+    (item): item is StoryboardVersion =>
+      isRecord(item) &&
+      typeof item.id === 'string' &&
+      typeof item.projectId === 'string' &&
+      typeof item.label === 'string' &&
+      typeof item.createdAt === 'string'
+  );
 }

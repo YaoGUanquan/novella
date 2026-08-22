@@ -62,6 +62,7 @@ export function useStepStoryboardContext() {
     onFramesChange: storyboard.setFrames,
     onFrameSelect: storyboard.selectFrame,
     onBuildDraft: actions.buildStoryboardDraft,
+    onSaveProject: actions.saveProject,
     onAddComment: actions.addFrameComment,
     onSaveVersion: actions.saveStoryboardVersion,
     onCompareVersions: actions.compareVersions,
@@ -78,6 +79,7 @@ export function useCollaborationContext() {
   const { state, actions } = useProjectEdit();
   const storyboard = useStoryboard();
   return {
+    projectId: state.projectId,
     commentDraft: state.commentDraft,
     versionLabel: state.versionLabel,
     selectedFrame: storyboard.selectedFrame,
@@ -100,8 +102,10 @@ export function useCollaborationContext() {
 export function useStepCharacterContext() {
   const { state, actions } = useProjectEdit();
   return {
+    content: state.content,
     characters: state.characters,
     onChange: actions.setCharacters,
+    onSaveProject: actions.saveProject,
   };
 }
 
