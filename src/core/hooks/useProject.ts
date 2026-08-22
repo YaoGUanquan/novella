@@ -80,7 +80,7 @@ function createInitialState(): ProjectState {
 
 export function useProject(_projectId?: string): UseProjectReturn {
   const [state, dispatch] = useReducer(projectReducer, undefined, createInitialState);
-  const setters = createProjectSetters(dispatch);
+  const setters = useMemo(() => createProjectSetters(dispatch), [dispatch]);
 
   const { projects } = state;
 

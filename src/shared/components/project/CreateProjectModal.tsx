@@ -12,12 +12,21 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { toast } from '@/shared/components/ui/toast';
 import { useProjectStore } from '@/shared/stores/project-store';
 import type { ProjectData } from '@/shared/types';
 
-interface CreateProjectModalProps {
+export interface InspirationContext {
+  projectName: string;
+  description: string;
+  artStyle: string;
+  aspectRatio: ProjectAspectRatio;
+}
+
+export interface CreateProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  generateInspiration?: (context: InspirationContext) => AsyncIterable<string>;
 }
 
 const ART_STYLES = [
@@ -50,39 +59,96 @@ const ART_STYLES = [
 const ASPECT_RATIOS = [
   { id: '16:9', name: '16:9 横屏漫剧', desc: '桌面大屏与视频平台标准 4K 画幅', icon: Video },
   { id: '9:16', name: '9:16 竖屏微短剧', desc: '移动端短视频竖屏全屏画幅', icon: Film },
-];
+] as const;
 
-export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, onOpenChange }) => {
+type ProjectAspectRatio = NonNullable<ProjectData['aspectRatio']>;
+
+type InspirationDraft = {
+  name: string;
+  description: string;
+};
+
+function parseInspirationDraft(response: string): InspirationDraft {
+  const normalized = response
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const parsed = JSON.parse(normalized) as Partial<InspirationDraft>;
+  const name = parsed.name?.trim();
+  const description = parsed.description?.trim();
+  if (!name || !description) throw new Error('AI 未返回完整的工程名称和剧情概要');
+  return { name, description };
+}
+
+function pickLocalInspiration(): InspirationDraft {
+  const samples: InspirationDraft[] = [
+    {
+      name: '赛博修仙：数字元神觉醒',
+      description: '在 2099 年的天道服务器中，凭借数字元神反抗黑神话财阀。',
+    },
+    { name: '都市战神：龙王归来', description: '隐姓埋名三年的战神重新出山，挥手间执掌万亿资本。' },
+    {
+      name: '规则怪谈：夜间公交车',
+      description: '继承编号 404 的诡异公交车，遵循守则在规则怪谈中求存。',
+    },
+  ];
+  return samples[Math.floor(Math.random() * samples.length)];
+}
+
+export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
+  open,
+  onOpenChange,
+  generateInspiration,
+}) => {
   const navigate = useNavigate();
   const store = useProjectStore();
 
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('anime');
-  const [selectedRatio, setSelectedRatio] = useState('16:9');
+  const [selectedRatio, setSelectedRatio] = useState<ProjectAspectRatio>('16:9');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
 
-  const handleRandomFill = () => {
-    const samples = [
-      {
-        name: '赛博修仙：数字元神觉醒',
-        desc: '在 2099 年的天道服务器中，凭借数字元神反抗黑神话财阀',
-      },
-      { name: '都市战神：龙王归来', desc: '隐姓埋名三年的战神重新出山，挥手间执掌万亿资本' },
-      { name: '规则怪谈：夜间公交车', desc: '继承编号 404 的诡异公交车，遵循守则在规则怪谈中求存' },
-    ];
-    const picked = samples[Math.floor(Math.random() * samples.length)];
-    setProjectName(picked.name);
-    setDescription(picked.desc);
+  const handleRandomFill = async () => {
+    if (isGeneratingInspiration) return;
+    setIsGeneratingInspiration(true);
+
+    const selectedArtStyle = ART_STYLES.find((style) => style.id === selectedStyle);
+    try {
+      let response = '';
+      if (!generateInspiration) throw new Error('未配置 AI 灵感生成服务');
+      for await (const chunk of generateInspiration({
+        projectName: projectName.trim(),
+        description: description.trim(),
+        artStyle: selectedArtStyle?.name ?? selectedStyle,
+        aspectRatio: selectedRatio,
+      })) {
+        response += chunk;
+      }
+
+      const inspiration = parseInspirationDraft(response);
+      setProjectName(inspiration.name);
+      setDescription(inspiration.description);
+      toast.success('已根据当前创作约束生成灵感');
+    } catch {
+      const inspiration = pickLocalInspiration();
+      setProjectName(inspiration.name);
+      setDescription(inspiration.description);
+      toast.warning('对话服务暂不可用，已使用本地灵感示例');
+    } finally {
+      setIsGeneratingInspiration(false);
+    }
   };
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     const finalTitle = projectName.trim() || `漫剧项目 · ${new Date().toLocaleDateString()}`;
     setIsSubmitting(true);
 
     try {
       const nowIso = new Date().toISOString();
-      const newProjectData: Partial<ProjectData> & Record<string, any> = {
+      const newProjectData: Partial<ProjectData> = {
         id: `prj-${Date.now()}`,
         name: finalTitle,
         description: description.trim() || 'AI 自动创建漫剧 SOP 生成项目',
@@ -94,18 +160,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
         createdAt: nowIso,
       };
 
-      let createdProject = newProjectData as any;
-
-      if (typeof store.createProject === 'function') {
-        createdProject = store.createProject(newProjectData as any);
-      }
-      if (typeof store.setCurrentProject === 'function') {
-        store.setCurrentProject(createdProject);
-      }
+      const createdProject = store.createProject(newProjectData);
+      store.setCurrentProject(createdProject);
 
       onOpenChange(false);
-      navigate('/workflow', {
-        state: { projectId: createdProject.id || newProjectData.id, isNewProject: true },
+      void navigate(`/workflow?projectId=${encodeURIComponent(createdProject.id)}`, {
+        state: { projectId: createdProject.id, isNewProject: true },
       });
     } catch (e) {
       console.error('Create project failed:', e);
@@ -128,11 +188,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
             <Button
               size="sm"
               variant="ghost"
-              onClick={handleRandomFill}
+              onClick={() => void handleRandomFill()}
+              disabled={isGeneratingInspiration}
               className="text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
             >
               <Wand2 className="w-3.5 h-3.5 mr-1" />
-              随机灵感
+              {isGeneratingInspiration ? '生成灵感中...' : '随机灵感'}
             </Button>
           </div>
           <DialogDescription className="text-xs text-[var(--muted-foreground)]">
@@ -170,7 +231,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
 
           {/* 画风选卡器 */}
           <div>
-            <label className="text-xs font-bold text-[var(--foreground)] block mb-2">选择视觉画风预设</label>
+            <label className="text-xs font-bold text-[var(--foreground)] block mb-2">
+              选择视觉画风预设
+            </label>
             <div className="grid grid-cols-2 gap-2.5">
               {ART_STYLES.map((style) => {
                 const isSelected = selectedStyle === style.id;
@@ -193,7 +256,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
                         {style.badge}
                       </span>
                     </div>
-                    <p className="text-[11px] text-[var(--muted-foreground)] leading-normal">{style.desc}</p>
+                    <p className="text-[11px] text-[var(--muted-foreground)] leading-normal">
+                      {style.desc}
+                    </p>
                   </div>
                 );
               })}
@@ -202,7 +267,9 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
 
           {/* 画幅比例选择 */}
           <div>
-            <label className="text-xs font-bold text-[var(--foreground)] block mb-2">目标画幅与分辨率</label>
+            <label className="text-xs font-bold text-[var(--foreground)] block mb-2">
+              目标画幅与分辨率
+            </label>
             <div className="grid grid-cols-2 gap-2.5">
               {ASPECT_RATIOS.map((ratio) => {
                 const isSelected = selectedRatio === ratio.id;
@@ -227,8 +294,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, on
                       <Icon className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="font-bold text-xs text-[var(--foreground)] block">{ratio.name}</span>
-                      <span className="text-[10px] text-[var(--muted-foreground)] block">{ratio.desc}</span>
+                      <span className="font-bold text-xs text-[var(--foreground)] block">
+                        {ratio.name}
+                      </span>
+                      <span className="text-[10px] text-[var(--muted-foreground)] block">
+                        {ratio.desc}
+                      </span>
                     </div>
                   </div>
                 );

@@ -14,7 +14,7 @@ import {
 import React, { useCallback, memo, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import CreateProjectModal from '@/shared/components/project/CreateProjectModal';
+import CreateProjectModal from '@/features/project/components/AICreateProjectModal';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { toast } from '@/shared/components/ui/toast';
@@ -32,7 +32,6 @@ interface ProjectCardProps {
   project: ProjectData;
   onView: (id: string) => void;
   onEdit: (id: string, e: React.MouseEvent) => void;
-  onOpenWorkflow: (id: string, e: React.MouseEvent) => void;
   onDelete: (id: string, e: React.MouseEvent) => void;
 }
 
@@ -40,7 +39,6 @@ const ProjectCard = memo(function ProjectCard({
   project,
   onView,
   onEdit,
-  onOpenWorkflow,
   onDelete,
 }: ProjectCardProps) {
   return (
@@ -121,7 +119,7 @@ const ProjectCard = memo(function ProjectCard({
         {/* 快捷操作按钮组 */}
         <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-[var(--border)] text-center">
           <button
-            onClick={(e) => onOpenWorkflow(project.id, e)}
+            onClick={(e) => onEdit(project.id, e)}
             className="px-2 py-1.5 rounded-lg bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-[11px] font-bold transition-all cursor-pointer"
           >
             继续创作
@@ -185,19 +183,6 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
         store.setCurrentProject(targetProj);
       }
       navigate(`/project/edit/${id}`);
-    },
-    [navigate]
-  );
-
-  const handleOpenWorkflow = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      const store = useProjectStore.getState();
-      const targetProj = store.projects.find((p) => p.id === id);
-      if (targetProj && typeof store.setCurrentProject === 'function') {
-        store.setCurrentProject(targetProj);
-      }
-      navigate(`/workflow`, { state: { projectId: id } });
     },
     [navigate]
   );
@@ -296,7 +281,6 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
               project={project}
               onView={handleViewProject}
               onEdit={handleEditProject}
-              onOpenWorkflow={handleOpenWorkflow}
               onDelete={handleDeleteProject}
             />
           ))}

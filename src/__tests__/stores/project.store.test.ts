@@ -42,6 +42,23 @@ describe('Project Store', () => {
 
       expect(project.name).toBe('新项目');
     });
+
+    it('应该保留创建时选择的视觉画风和目标画幅', () => {
+      const { createProject } = useProjectStore.getState();
+
+      const project = createProject({
+        name: '赛博修仙',
+        artStyle: 'cyberpunk',
+        aspectRatio: '9:16',
+      });
+
+      expect(project.artStyle).toBe('cyberpunk');
+      expect(project.aspectRatio).toBe('9:16');
+      expect(useProjectStore.getState().projects[0]).toMatchObject({
+        artStyle: 'cyberpunk',
+        aspectRatio: '9:16',
+      });
+    });
   });
 
   describe('updateProject', () => {

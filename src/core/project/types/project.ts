@@ -64,6 +64,10 @@ export interface ProjectData {
   id: string;
   name: string;
   description?: string;
+  /** 创建工程时选择的视觉画风预设标识。 */
+  artStyle?: string;
+  /** 创建工程时选择的目标视频画幅。 */
+  aspectRatio?: '16:9' | '9:16';
   status?: 'draft' | 'processing' | 'completed' | 'failed';
   content?: string;
   videos?: {

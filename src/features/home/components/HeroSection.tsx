@@ -15,7 +15,7 @@ import {
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import CreateProjectModal from '@/shared/components/project/CreateProjectModal';
+import CreateProjectModal from '@/features/project/components/AICreateProjectModal';
 import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
@@ -104,7 +104,8 @@ const HeroSection = () => {
                     </span>
                   </h1>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    全流程 AI 漫剧 / 动画短剧 Multi-Agent 自动化引擎 · 360 空间记忆与 Consistency 锁脸
+                    全流程 AI 漫剧 / 动画短剧 Multi-Agent 自动化引擎 · 360 空间记忆与 Consistency
+                    锁脸
                   </p>
                 </div>
 
@@ -189,7 +190,9 @@ const HeroSection = () => {
               {/* 渲染进度条 Overlay */}
               <div className="absolute bottom-3 left-3 right-3 p-3 rounded-xl bg-slate-950/80 backdrop-blur-md border border-white/10 flex items-center justify-between gap-4 text-xs font-mono">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-[#00f5d4] font-bold animate-pulse">Auto-Swarm GPU 压制... 85%</span>
+                  <span className="text-[#00f5d4] font-bold animate-pulse">
+                    Auto-Swarm GPU 压制... 85%
+                  </span>
                   <div className="flex-1 h-2 rounded-full bg-white/20 overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-[#00f5d4] to-purple-500 w-[85%] transition-all duration-300" />
                   </div>
@@ -213,7 +216,8 @@ const HeroSection = () => {
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                Novella 集成 Hub-and-Spoke 多智能体编导调度、3D 运镜矢量、角色 Consistency 锁脸与 WebAssembly GPU 4K 压制。
+                Novella 集成 Hub-and-Spoke 多智能体编导调度、3D 运镜矢量、角色 Consistency 锁脸与
+                WebAssembly GPU 4K 压制。
               </p>
 
               <div className="space-y-2 pt-2 text-xs">
@@ -227,7 +231,9 @@ const HeroSection = () => {
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
                   <span className="text-slate-400">TTS 音频对齐</span>
-                  <span className="text-emerald-400 font-mono font-bold">CosyVoice / ElevenLabs</span>
+                  <span className="text-emerald-400 font-mono font-bold">
+                    CosyVoice / ElevenLabs
+                  </span>
                 </div>
               </div>
             </div>

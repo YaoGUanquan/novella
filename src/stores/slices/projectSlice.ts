@@ -27,6 +27,8 @@ export function createProjectSlice(set: ProjectSetState, get: ProjectGetState) {
         id: partial.id || uuidv4(),
         name: partial.name ?? '新项目',
         description: partial.description ?? '',
+        artStyle: partial.artStyle,
+        aspectRatio: partial.aspectRatio,
         content: partial.content ?? '',
         status: partial.status ?? 'draft',
         createdAt: partial.createdAt || now,
