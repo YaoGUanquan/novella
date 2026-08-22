@@ -122,14 +122,5 @@
     "vite": "^6.0.0",
     "vite-plugin-compression": "^0.5.1",
     "vitepress": "^1.6.4"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md,css}": [
-      "prettier --write"
-    ]
   }
 }
