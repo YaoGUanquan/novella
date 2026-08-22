@@ -5,5 +5,6 @@
 //! themselves.
 
 pub mod app;
+pub mod dialogue;
 pub mod file;
 pub mod video;

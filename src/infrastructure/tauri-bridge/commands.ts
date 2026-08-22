@@ -17,7 +17,10 @@ import {
   requestPermission,
 } from '@tauri-apps/plugin-notification';
 
+import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
+import { textChunksFromEvents } from '@/core/ai/dialogue-stream-events';
 import { logger } from '@/core/utils/logger';
+import type { AIMessage } from '@/shared/types/ai-core';
 
 import type {
   OpenFileOptions,
@@ -41,6 +44,39 @@ export type {
   ExportProgressCallback,
   DirInfo,
 } from './commands-types';
+
+export interface NativeConfiguredDialogueRequest {
+  streamId: string;
+  protocol: 'openai' | 'anthropic';
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  messages: AIMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
+interface NativeDialogueChunkEvent {
+  stream_id: string;
+  content: string;
+  kind?: 'text' | 'thinking';
+}
+interface NativeDialogueCompleteEvent {
+  stream_id: string;
+  cancelled: boolean;
+}
+interface NativeDialogueErrorEvent {
+  stream_id: string;
+  kind: string;
+  status?: number;
+  message: string;
+}
+
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+  );
+}
 
 // ========== 服务类 ==========
 
@@ -123,6 +159,19 @@ class TauriService {
     return result;
   }
 
+  async selectDirectory(options?: {
+    title?: string;
+    defaultPath?: string;
+  }): Promise<string | null> {
+    const result = await open({
+      title: options?.title ?? '选择工作目录',
+      defaultPath: options?.defaultPath,
+      directory: true,
+      multiple: false,
+    });
+    return typeof result === 'string' ? result : null;
+  }
+
   /**
    * 打开保存文件对话框
    */
@@ -199,6 +248,117 @@ class TauriService {
           ? (entry as { isDirectory: boolean }).isDirectory
           : ((entry as { is_directory: boolean }).is_directory ?? false),
     }));
+  }
+
+  /**
+   * Stream a configured dialogue through the Rust transport. The API key is
+   * passed only to the native command and is never included in emitted events.
+   */
+  async *streamConfiguredDialogue(
+    request: NativeConfiguredDialogueRequest,
+    signal?: AbortSignal
+  ): AsyncGenerator<string> {
+    yield* textChunksFromEvents(this.streamConfiguredDialogueEvents(request, signal));
+  }
+
+  /**
+   * Stream typed native dialogue events. Thinking chunks are omitted from
+   * `streamConfiguredDialogue()` so JSON callers are not polluted.
+   */
+  async *streamConfiguredDialogueEvents(
+    request: NativeConfiguredDialogueRequest,
+    signal?: AbortSignal
+  ): AsyncGenerator<DialogueStreamEvent> {
+    if (!isTauriRuntime()) {
+      throw new Error('原生对话传输仅在桌面端可用');
+    }
+
+    const queue: Array<
+      NativeDialogueChunkEvent | NativeDialogueCompleteEvent | NativeDialogueErrorEvent
+    > = [];
+    let wake: (() => void) | null = null;
+    let complete = false;
+    let cancelled = false;
+    let terminalError: NativeDialogueErrorEvent | null = null;
+
+    const push = (
+      event: NativeDialogueChunkEvent | NativeDialogueCompleteEvent | NativeDialogueErrorEvent
+    ) => {
+      queue.push(event);
+      wake?.();
+      wake = null;
+    };
+    const waitForEvent = () =>
+      new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+    const unlisten = await Promise.all([
+      listen<NativeDialogueChunkEvent>('novella://dialogue/chunk', (event) => {
+        if (event.payload.stream_id === request.streamId) push(event.payload);
+      }),
+      listen<NativeDialogueCompleteEvent>('novella://dialogue/complete', (event) => {
+        if (event.payload.stream_id === request.streamId) push(event.payload);
+      }),
+      listen<NativeDialogueErrorEvent>('novella://dialogue/error', (event) => {
+        if (event.payload.stream_id === request.streamId) push(event.payload);
+      }),
+    ]);
+    const abort = () => {
+      cancelled = true;
+      void invoke('cancel_configured_dialogue', { streamId: request.streamId });
+      push({ stream_id: request.streamId, cancelled: true });
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+
+    try {
+      await invoke('start_configured_dialogue', {
+        request: {
+          stream_id: request.streamId,
+          protocol: request.protocol,
+          endpoint: request.endpoint,
+          api_key: request.apiKey,
+          model: request.model,
+          messages: request.messages,
+          temperature: request.temperature,
+          max_tokens: request.maxTokens,
+        },
+      });
+      while (!complete || queue.length > 0) {
+        if (queue.length === 0) {
+          await waitForEvent();
+          continue;
+        }
+        const event = queue.shift()!;
+        if ('content' in event) {
+          yield {
+            kind: event.kind === 'thinking' ? 'thinking' : 'text',
+            text: event.content,
+          };
+        } else if ('message' in event) {
+          terminalError = event;
+          complete = true;
+        } else {
+          complete = true;
+          cancelled = cancelled || event.cancelled;
+        }
+      }
+      if (terminalError && !cancelled) {
+        const error = new Error(terminalError.message) as Error & {
+          status?: number;
+          kind?: string;
+        };
+        error.name = 'NativeConfiguredDialogueError';
+        error.status = terminalError.status;
+        error.kind = terminalError.kind;
+        throw error;
+      }
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      unlisten.forEach((remove) => remove());
+      if (!complete && !cancelled) {
+        void invoke('cancel_configured_dialogue', { streamId: request.streamId });
+      }
+    }
   }
 
   // ========== 路径操作 ==========
@@ -372,7 +532,10 @@ class TauriService {
    */
   async checkRuntimeDependencies(): Promise<Record<string, unknown>> {
     try {
-      if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      if (
+        typeof window === 'undefined' ||
+        !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      ) {
         return { webview2_installed: true, is_tauri: false };
       }
       return await invoke('check_runtime_dependencies');
@@ -447,7 +610,10 @@ class TauriService {
    */
   async checkFFmpeg(): Promise<{ installed: boolean; version?: string }> {
     try {
-      if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      if (
+        typeof window === 'undefined' ||
+        !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      ) {
         return { installed: true, version: 'Web/WASM Mode' };
       }
       const result = await invoke<Record<string, unknown>>('check_ffmpeg');

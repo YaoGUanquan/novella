@@ -119,6 +119,8 @@ pub fn run() {
             commands::app::check_runtime_dependencies,
             commands::app::get_app_data_path,
             commands::app::open_file_location,
+            commands::dialogue::start_configured_dialogue,
+            commands::dialogue::cancel_configured_dialogue,
             commands::file::check_app_data_directory,
             commands::file::save_project_file,
             commands::file::read_project_file,
