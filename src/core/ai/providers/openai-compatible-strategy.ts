@@ -5,6 +5,10 @@
  * 仅 endpoint URL 和 provider 名称不同。提取共享的 fetch + 错误处理 + 响应解析。
  */
 
+import {
+  resolveDialogueTransportEndpoint,
+  resolveOpenAICompatibleEndpoint,
+} from '@/core/config/ai-connection-settings';
 import type { AIRequestConfig, AIResponse } from '@/shared/types/ai-core';
 
 import { BaseAIProviderStrategy } from './base';
@@ -19,14 +23,23 @@ export abstract class OpenAICompatibleStrategy extends BaseAIProviderStrategy {
   protected abstract readonly apiConfig: OpenAICompatibleConfig;
 
   async call(apiKey: string, config: AIRequestConfig): Promise<AIResponse> {
-    const response = await fetch(this.apiConfig.endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(config),
-    });
+    const { endpoint, ...requestBody } = config;
+    const response = await fetch(
+      resolveDialogueTransportEndpoint(
+        resolveOpenAICompatibleEndpoint(
+          endpoint || this.apiConfig.endpoint,
+          this.apiConfig.endpoint
+        )
+      ),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      }
+    );
 
     if (!response.ok) {
       throw this.handleError(this.apiConfig.providerLabel, response.status);

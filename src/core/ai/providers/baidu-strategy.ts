@@ -33,8 +33,15 @@ class BaiduStrategy extends BaseAIProviderStrategy {
       throw new Error(`百度认证失败: 未获取到 access_token`);
     }
 
+    const configuredEndpoint =
+      typeof config.endpoint === 'string' ? config.endpoint.replace(/\/$/, '') : '';
+    const chatEndpoint = configuredEndpoint
+      ? configuredEndpoint.includes('{model}')
+        ? configuredEndpoint.replace('{model}', encodeURIComponent(config.model))
+        : `${configuredEndpoint}/${encodeURIComponent(config.model)}`
+      : `https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/${config.model}`;
     const response = await fetch(
-      `https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/${config.model}?access_token=${accessToken}`,
+      `${chatEndpoint}?access_token=${encodeURIComponent(accessToken)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

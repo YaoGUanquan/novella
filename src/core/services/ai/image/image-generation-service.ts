@@ -18,13 +18,18 @@ export { generateWithSeedream } from './image-generation/providers/seedream';
 export { generateWithKling, generateVideoWithKling } from './image-generation/providers/kling';
 export { generateWithVidu, generateVideoWithVidu } from './image-generation/providers/vidu';
 export { generateVideoWithSeedance } from './image-generation/providers/seedance';
+export { generateWithConfiguredImage } from './configured-image-service';
 
 // Import from providers for unified API
 import axios from 'axios';
 
+import { loadRemoteVideoGatewaySettings } from '@/core/config/ai-connection-settings';
 import { logger } from '@/core/utils/logger';
 import { retryRequest } from '@/shared/utils';
 
+import { generateRemoteVideo } from '../video/remote-video-service';
+
+import { generateWithConfiguredImage } from './configured-image-service';
 import { generateWithKling, generateVideoWithKling } from './image-generation/providers/kling';
 import { generateVideoWithSeedance } from './image-generation/providers/seedance';
 import { generateWithSeedream } from './image-generation/providers/seedream';
@@ -62,6 +67,8 @@ export async function generateImage(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): Promise<ImageGenerationResult> {
+  const configured = await generateWithConfiguredImage(prompt, options);
+  if (configured) return configured;
   const model = options.model ?? 'seedream-5.0';
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
 
@@ -100,6 +107,63 @@ export async function generateVideo(
   prompt: string,
   options: VideoGenerationOptions = {}
 ): Promise<VideoGenerationResult> {
+  const remoteSettings = await loadRemoteVideoGatewaySettings();
+  if (remoteSettings.enabled && remoteSettings.apiKey.trim()) {
+    const remoteModels = new Set([
+      'grok-imagine-1.5-video',
+      'video-v1',
+      'MiniMax-H3-933-1440P-GF',
+      'video-v2',
+      'video-v2-fast',
+      'video-v3',
+    ]);
+    const requestedModel =
+      options.model && remoteModels.has(options.model) ? options.model : remoteSettings.model;
+    const images = [
+      ...(options.referenceImage ? [options.referenceImage] : []),
+      ...(options.referenceImages ?? []),
+      ...(options.characterReferences ?? []).flatMap((character) => [
+        character.referenceImageUrls?.front,
+        character.referenceImageUrls?.fullBody,
+        character.referenceImageUrls?.side,
+      ]),
+    ].filter((value): value is string => Boolean(value));
+    const remote = await generateRemoteVideo(
+      {
+        model: requestedModel,
+        prompt,
+        duration: options.duration,
+        aspectRatio: options.aspectRatio,
+        resolution: options.resolution,
+        generateAudio: options.generateAudio,
+        negativePrompt: options.negativePrompt,
+        seed: options.seed,
+        bypassFaceCheck: options.bypassFaceCheck,
+        gridStrength: options.gridStrength,
+        startFrameUrl: options.startFrameUrl,
+        endFrameUrl: options.endFrameUrl,
+        images,
+        videos: options.referenceVideos,
+        audios: options.referenceAudios,
+      },
+      { signal: options.signal }
+    );
+    const status = remote.status.toLowerCase();
+    return {
+      url: remote.resultUrl ?? '',
+      duration: options.duration ?? 5,
+      width: 1920,
+      height: 1080,
+      model: remote.model,
+      taskId: remote.taskId,
+      status:
+        ['completed', 'succeeded', 'success'].includes(status) || remote.resultUrl
+          ? 'completed'
+          : status === 'failed' || status === 'failure'
+            ? 'failed'
+            : 'processing',
+    };
+  }
   const model = options.model ?? 'seedance-2.0';
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
 
@@ -183,7 +247,6 @@ export async function getVideoStatus(
           : 'processing',
   };
 }
-
 
 export const imageGenerationService = {
   generateImage,

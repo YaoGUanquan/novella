@@ -10,6 +10,8 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+declare const NOVELLA_VITE_DIALOGUE_PROXY_ENABLED: boolean;
+
 // Tauri API 类型声明
 declare module '@tauri-apps/api/core' {
   export function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T>;

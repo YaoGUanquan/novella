@@ -25,6 +25,9 @@ export function mapCharacterReferences(
  * 获取 API Key
  */
 export async function getAPIKey(service: string): Promise<string> {
+  const { loadServiceConnection } = await import('@/core/config/ai-connection-settings');
+  const generic = await loadServiceConnection('image');
+  if (generic.apiKey) return generic.apiKey;
   const { secureStorage } = await import('../../../project/secure-storage-service');
   const value = await secureStorage.getSecureConfig(`api_key_${service}`);
 

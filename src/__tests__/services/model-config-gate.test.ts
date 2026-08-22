@@ -14,12 +14,23 @@ describe('Model Config Gate & API Key Storage Verification Suite', () => {
   });
 
   it('Should return true when a valid API key is stored under ai_model_settings_{provider}', () => {
-    localStorage.setItem('ai_model_settings_openai', JSON.stringify({ apiKey: 'sk-proj-validtestkey1234567890' }));
+    localStorage.setItem(
+      'ai_model_settings_openai',
+      JSON.stringify({ apiKey: 'sk-proj-validtestkey1234567890' })
+    );
     expect(hasAnyConfiguredModelProvider()).toBe(true);
   });
 
   it('Should return true when a valid API key is stored under api_{provider}_key', () => {
     localStorage.setItem('api_deepseek_key', 'sk-ds-validtestkey1234567890');
+    expect(hasAnyConfiguredModelProvider()).toBe(true);
+  });
+
+  it('Should return true when a normalized secure connection is stored', () => {
+    localStorage.setItem(
+      'secure_ai_connection_openai',
+      JSON.stringify({ apiKey: 'custom-gateway-key-12345' })
+    );
     expect(hasAnyConfiguredModelProvider()).toBe(true);
   });
 

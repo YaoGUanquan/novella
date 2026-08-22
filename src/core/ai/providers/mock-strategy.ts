@@ -2,10 +2,19 @@
  * Mock Provider Strategy (用于测试/开发)
  */
 
-import { delay } from '@/shared/utils/timing';
 import type { AIRequestConfig, AIResponse } from '@/shared/types/ai-core';
+import { delay } from '@/shared/utils/timing';
 
 import { BaseAIProviderStrategy } from './base';
+
+function textContent(content: AIRequestConfig['messages'][number]['content']): string {
+  return typeof content === 'string'
+    ? content
+    : content
+        .filter((part): part is Extract<typeof part, { type: 'text' }> => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n');
+}
 
 export class MockStrategy extends BaseAIProviderStrategy {
   readonly name = 'mock';
@@ -62,7 +71,7 @@ export class MockStrategy extends BaseAIProviderStrategy {
   }
 
   private generateMockContent(config: AIRequestConfig): string {
-    const userMessage = config.messages.find((m) => m.role === 'user')?.content ?? '';
+    const userMessage = textContent(config.messages.find((m) => m.role === 'user')?.content ?? '');
 
     if (userMessage.includes('脚本') || userMessage.includes('主题')) {
       const match = userMessage.match(/主题[：:](.+?)(?:\n|$)/);

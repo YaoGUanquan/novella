@@ -92,7 +92,10 @@ export interface AIModelSettings {
   enabled: boolean;
   apiKey?: string;
   apiSecret?: string;
+  protocol?: 'openai' | 'anthropic';
   apiUrl?: string;
+  /** OpenAI-compatible alias retained for callers using the provider terminology. */
+  baseURL?: string;
   apiVersion?: string;
   model?: string;
   temperature?: number;
@@ -122,13 +125,36 @@ export interface StreamCallbacks {
   onComplete?: () => void;
 }
 
+export type AIMessageRole = 'system' | 'user' | 'assistant';
+
+export interface AITextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface AIImageUrlContentPart {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+export type AIMessageContent = string | Array<AITextContentPart | AIImageUrlContentPart>;
+
+export interface AIMessage {
+  role: AIMessageRole;
+  content: AIMessageContent;
+}
+
 /** AI request config */
 export interface AIRequestConfig {
   model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: AIMessage[];
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  /** Internal transport metadata. Kept non-enumerable before JSON serialization. */
+  endpoint?: string;
+  /** Internal transport metadata. Kept non-enumerable before JSON serialization. */
+  signal?: AbortSignal;
 }
 
 /** Mock configuration options */

@@ -15,6 +15,17 @@
 
 // 图像/视频生成服务
 export { imageGenerationService } from './ai/image/image-generation-service';
+export {
+  remoteVideoService,
+  createRemoteVideoTask,
+  getRemoteVideoTask,
+  generateRemoteVideo,
+} from './ai/video/remote-video-service';
+export type {
+  RemoteVideoModel,
+  RemoteVideoRequest,
+  RemoteVideoTask,
+} from './ai/video/remote-video-types';
 export type {
   ImageGenerationOptions,
   ImageGenerationResult,

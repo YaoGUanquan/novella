@@ -2,6 +2,12 @@
  * OpenAI Provider Strategy
  */
 
+import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
+import { parseOpenAIStreamDelta, textChunksFromEvents } from '@/core/ai/dialogue-stream-events';
+import {
+  resolveDialogueTransportEndpoint,
+  resolveOpenAICompatibleEndpoint,
+} from '@/core/config/ai-connection-settings';
 import type { AIRequestConfig } from '@/shared/types/ai-core';
 
 import type { OpenAICompatibleConfig } from './openai-compatible-strategy';
@@ -19,14 +25,28 @@ export class OpenAIStrategy extends OpenAICompatibleStrategy {
   supportsStreaming = true;
 
   async *stream(apiKey: string, config: AIRequestConfig): AsyncGenerator<string> {
-    const response = await fetch(openAIConfig.endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ...config, stream: true }),
-    });
+    yield* textChunksFromEvents(this.streamEvents(apiKey, config));
+  }
+
+  async *streamEvents(
+    apiKey: string,
+    config: AIRequestConfig
+  ): AsyncGenerator<DialogueStreamEvent> {
+    const { endpoint, signal, ...requestBody } = config;
+    const response = await fetch(
+      resolveDialogueTransportEndpoint(
+        resolveOpenAICompatibleEndpoint(endpoint || openAIConfig.endpoint, openAIConfig.endpoint)
+      ),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...requestBody, stream: true }),
+        signal,
+      }
+    );
 
     if (!response.ok) {
       throw this.handleError(openAIConfig.providerLabel, response.status);
@@ -54,11 +74,9 @@ export class OpenAIStrategy extends OpenAICompatibleStrategy {
             if (data === '[DONE]') return;
 
             try {
-              const json = JSON.parse(data);
-              const content = json.choices?.[0]?.delta?.content;
-              if (content) yield content;
+              yield* parseOpenAIStreamDelta(JSON.parse(data));
             } catch {
-              // 忽略解析错误
+              // Ignore incomplete or non-text SSE events.
             }
           }
         }

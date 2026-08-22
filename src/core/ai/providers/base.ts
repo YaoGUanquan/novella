@@ -3,6 +3,7 @@
  * 所有 AI Provider 实现必须实现此接口
  */
 
+import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
 import type { AIRequestConfig, AIResponse } from '@/shared/types/ai-core';
 
 export interface AIProviderStrategy {
@@ -25,6 +26,11 @@ export interface AIProviderStrategy {
    * 流式调用（可选）
    */
   stream?(apiKey: string, config: AIRequestConfig): AsyncGenerator<string>;
+
+  /**
+   * Typed stream events. Thinking chunks must not be yielded from `stream()`.
+   */
+  streamEvents?(apiKey: string, config: AIRequestConfig): AsyncGenerator<DialogueStreamEvent>;
 }
 
 /**

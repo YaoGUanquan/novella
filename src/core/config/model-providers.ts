@@ -281,6 +281,28 @@ export function hasAnyConfiguredModelProvider(): boolean {
   };
 
   for (const p of allCheckKeys) {
+    if (p === 'openai') {
+      try {
+        for (const kind of ['dialogue', 'image', 'video']) {
+          const serviceStored = localStorage.getItem(`secure_ai_service_${kind}`);
+          if (serviceStored && isValValid(JSON.parse(serviceStored)?.apiKey)) return true;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    try {
+      const secureStored = localStorage.getItem(`secure_ai_connection_${p}`);
+      if (secureStored) {
+        const parsed = JSON.parse(secureStored);
+        if (isValValid(parsed?.apiKey)) return true;
+      }
+      if (isValValid(localStorage.getItem(`secure_api_${p}_key`))) return true;
+    } catch (e) {
+      // ignore
+    }
+
     // 1. 检查 ai_model_settings_${p}
     try {
       const stored = localStorage.getItem(`ai_model_settings_${p}`);
@@ -297,7 +319,8 @@ export function hasAnyConfiguredModelProvider(): boolean {
     try {
       const k1 = localStorage.getItem(`api_${p}_key`);
       if (isValValid(k1)) return true;
-      const k2 = localStorage.getItem(`novella_api_key_${p}`) || localStorage.getItem(`${p}_api_key`);
+      const k2 =
+        localStorage.getItem(`novella_api_key_${p}`) || localStorage.getItem(`${p}_api_key`);
       if (isValValid(k2)) return true;
     } catch (e) {
       // ignore

@@ -16,10 +16,19 @@
  * 19 个调用方无需修改。
  */
 
-import { mockStrategy } from '@/core/ai/providers';
+import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
+import { textChunksFromEvents, textEventsFromStringStream } from '@/core/ai/dialogue-stream-events';
+import { mockStrategy, providerRegistry } from '@/core/ai/providers';
+import {
+  loadServiceConnection,
+  resolveAnthropicEndpoint,
+  resolveOpenAICompatibleEndpoint,
+} from '@/core/config/ai-connection-settings';
 import { getModelById } from '@/core/config/models-config';
 import { LLM_MODELS, DEFAULT_LLM_MODEL, MODEL_RECOMMENDATIONS } from '@/core/constants';
+import { isTauri } from '@/core/utils/environment';
 import { logger } from '@/core/utils/logger';
+import { tauriService } from '@/infrastructure/tauri-bridge/commands';
 import type { Script } from '@/shared/types';
 
 import { batchGenerate } from './ai-batch';
@@ -35,10 +44,55 @@ import type {
   AIResponse,
   AIModel,
   AIModelSettings,
+  AIRequestConfig,
   VideoAnalysis,
   MockConfig,
 } from './ai-service-types';
-import { streamGenerateWithFallback } from './ai-stream';
+import { streamGenerateWithFallback, yieldChunked } from './ai-stream';
+import { promptBuilderService } from './prompt-builder-service';
+
+export type ConfiguredDialogueFailureKind = 'http' | 'transport';
+
+/** A sanitized error contract for UI consumers of the configured dialogue service. */
+export class ConfiguredDialogueError extends Error {
+  readonly kind: ConfiguredDialogueFailureKind;
+  readonly host: string;
+  readonly status?: number;
+
+  constructor(options: { kind: ConfiguredDialogueFailureKind; endpoint: string; status?: number }) {
+    const host = safeEndpointHost(options.endpoint);
+    super(
+      options.kind === 'http'
+        ? `Configured dialogue service returned HTTP ${options.status}`
+        : `Configured dialogue service is unreachable at ${host}`
+    );
+    this.name = 'ConfiguredDialogueError';
+    this.kind = options.kind;
+    this.host = host;
+    this.status = options.status;
+  }
+}
+
+function safeEndpointHost(endpoint: string): string {
+  try {
+    return new URL(endpoint).host || 'configured service';
+  } catch {
+    return 'configured service';
+  }
+}
+
+function getHttpStatus(error: unknown): number | undefined {
+  const nativeStatus =
+    error && typeof error === 'object' && 'status' in error
+      ? Number((error as { status?: unknown }).status)
+      : NaN;
+  if (Number.isInteger(nativeStatus) && nativeStatus >= 100 && nativeStatus <= 599)
+    return nativeStatus;
+  const message = error instanceof Error ? error.message : '';
+  const match = message.match(/(?:API error|API 错误):\s*(\d{3})/i);
+  const status = Number(match?.[1]);
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
+}
 
 // Re-export shared types from centralized types file
 export type {
@@ -53,8 +107,6 @@ export type {
   VideoScene,
   Keyframe,
 } from './ai-service-types';
-
-import { promptBuilderService } from './prompt-builder-service';
 
 class AIService {
   // 启用/禁用 Mock 模式
@@ -290,9 +342,115 @@ ${script}
 
     const settings = this.buildDefaultSettings(model, options);
 
-    yield* streamGenerateWithFallback(model, settings, prompt, () =>
-      this.generate(prompt, options)
+    yield* streamGenerateWithFallback(
+      model,
+      settings,
+      prompt,
+      () => this.generate(prompt, options),
+      options.signal
     );
+  }
+
+  /**
+   * Stream a conversation through the connection selected in system settings.
+   * Unlike streamGenerate(), this entry point deliberately supports custom
+   * model identifiers which are not part of the built-in model catalog.
+   */
+  async *streamConfiguredDialogue(
+    messages: AIRequestConfig['messages'],
+    options: {
+      signal?: AbortSignal;
+      temperature?: number;
+      max_tokens?: number;
+    } = {}
+  ): AsyncGenerator<string> {
+    yield* textChunksFromEvents(this.streamConfiguredDialogueEvents(messages, options));
+  }
+
+  async *streamConfiguredDialogueEvents(
+    messages: AIRequestConfig['messages'],
+    options: {
+      signal?: AbortSignal;
+      temperature?: number;
+      max_tokens?: number;
+    } = {}
+  ): AsyncGenerator<DialogueStreamEvent> {
+    const connection = await loadServiceConnection('dialogue');
+    if (!connection.enabled) {
+      throw new Error('对话服务已关闭，请先在系统偏好设置中启用对话模型。');
+    }
+    if (!connection.apiKey.trim()) {
+      throw new Error('未配置对话模型密钥，请先在系统偏好设置中保存对话服务。');
+    }
+
+    const protocol = connection.protocol ?? 'openai';
+    const strategy = providerRegistry.get(protocol);
+    if (!strategy) {
+      throw new Error(`不支持的对话协议：${protocol}`);
+    }
+
+    const requestConfig: AIRequestConfig = {
+      model: connection.model,
+      messages,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.max_tokens ?? 2000,
+      stream: true,
+    };
+    Object.defineProperty(requestConfig, 'endpoint', {
+      value: connection.baseUrl,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(requestConfig, 'signal', {
+      value: options.signal,
+      enumerable: false,
+      configurable: true,
+    });
+
+    try {
+      if (isTauri()) {
+        const nativeEndpoint =
+          protocol === 'anthropic'
+            ? resolveAnthropicEndpoint(connection.baseUrl)
+            : resolveOpenAICompatibleEndpoint(
+                connection.baseUrl,
+                'https://api.openai.com/v1/chat/completions'
+              );
+        yield* tauriService.streamConfiguredDialogueEvents(
+          {
+            streamId: `dialogue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            protocol,
+            endpoint: nativeEndpoint,
+            apiKey: connection.apiKey,
+            model: connection.model,
+            messages,
+            temperature: requestConfig.temperature,
+            maxTokens: requestConfig.max_tokens,
+          },
+          options.signal
+        );
+        return;
+      }
+      if (strategy.streamEvents) {
+        yield* strategy.streamEvents(connection.apiKey, requestConfig);
+        return;
+      }
+      if (strategy.supportsStreaming && strategy.stream) {
+        yield* textEventsFromStringStream(strategy.stream(connection.apiKey, requestConfig));
+        return;
+      }
+
+      const response = await strategy.call(connection.apiKey, requestConfig);
+      yield* textEventsFromStringStream(yieldChunked(response.content, 10, options.signal));
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      const status = getHttpStatus(error);
+      throw new ConfiguredDialogueError({
+        kind: status ? 'http' : 'transport',
+        endpoint: connection.baseUrl,
+        status,
+      });
+    }
   }
 
   async batchGenerate(

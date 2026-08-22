@@ -60,19 +60,41 @@ export interface CharacterVideoRef {
 
 export interface VideoGenerationOptions {
   /** 视频模型 */
-  model?: 'seedance-2.0' | 'kling-1.6' | 'kling-3.0' | 'vidu-2.0';
+  model?:
+    | 'seedance-2.0'
+    | 'kling-1.6'
+    | 'kling-3.0'
+    | 'vidu-2.0'
+    | 'grok-imagine-1.5-video'
+    | 'video-v1'
+    | 'MiniMax-H3-933-1440P-GF'
+    | 'video-v2'
+    | 'video-v2-fast'
+    | 'video-v3'
+    | string;
   /** 视频时长 (秒) */
   duration?: number;
   /** 帧率 */
   fps?: number;
   /** 参考图片（首帧/关键帧） */
   referenceImage?: string;
+  /** 额外的公网图片、视频和音频引用。 */
+  referenceImages?: string[];
+  referenceVideos?: string[];
+  referenceAudios?: string[];
   /** 角色一致性参考（多个角色的三视图 reference） */
   characterReferences?: CharacterVideoRef[];
   /** 提示词 */
   prompt?: string;
   /** 负面提示词 */
   negativePrompt?: string;
+  resolution?: string;
+  generateAudio?: boolean;
+  seed?: number;
+  bypassFaceCheck?: boolean;
+  gridStrength?: number;
+  startFrameUrl?: string;
+  endFrameUrl?: string;
   /** 画面比例 */
   aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
   /** AbortSignal for cancellation */

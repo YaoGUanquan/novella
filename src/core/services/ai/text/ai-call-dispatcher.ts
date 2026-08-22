@@ -6,6 +6,7 @@
  */
 
 import { providerRegistry, mockStrategy } from '@/core/ai/providers';
+import { resolveAIModelSettings } from '@/core/config/ai-connection-settings';
 import { logger } from '@/core/utils/logger';
 
 import type { AIResponse, AIModel, AIModelSettings, AIRequestConfig } from './ai-service-types';
@@ -26,7 +27,7 @@ export function buildRequestConfig(
   settings: AIModelSettings,
   prompt: string
 ): AIRequestConfig {
-  return {
+  const config: AIRequestConfig = {
     model: settings.model ?? model.id,
     messages: [
       { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
@@ -35,6 +36,16 @@ export function buildRequestConfig(
     temperature: settings.temperature ?? DEFAULT_TEMPERATURE,
     max_tokens: settings.maxTokens ?? DEFAULT_MAX_TOKENS,
   };
+
+  const endpoint = settings.baseURL || settings.apiUrl;
+  if (endpoint) {
+    Object.defineProperty(config, 'endpoint', {
+      value: endpoint,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return config;
 }
 
 /**
@@ -49,18 +60,35 @@ export async function dispatchAIRequest(
   config: AIRequestConfig,
   requestId?: string
 ): Promise<AIResponse> {
-  if (!settings?.apiKey || settings.apiKey.trim().length === 0) {
+  const resolvedSettings = await resolveAIModelSettings(model.provider, model.id, settings);
+  if (!resolvedSettings?.apiKey || resolvedSettings.apiKey.trim().length === 0) {
     throw new Error('未配置 API Key！请先进入【系统设置】配置对应 AI 模型提供商的 API Key。');
   }
 
   try {
-    const strategy = providerRegistry.get(model.provider);
+    const strategyProvider = resolvedSettings.protocol ?? model.provider;
+    const strategy = providerRegistry.get(strategyProvider) ?? providerRegistry.get(model.provider);
     if (strategy) {
-      if (model.provider === 'baidu') {
-        const baiduConfig = { ...config, apiSecret: settings.apiSecret };
-        return await strategy.call(settings.apiKey, baiduConfig as AIRequestConfig, requestId);
+      const requestConfig: AIRequestConfig = {
+        ...config,
+        model: resolvedSettings.model ?? config.model,
+        temperature: resolvedSettings.temperature ?? config.temperature,
+        max_tokens: resolvedSettings.maxTokens ?? config.max_tokens,
+      };
+      Object.defineProperty(requestConfig, 'endpoint', {
+        value: resolvedSettings.baseURL || resolvedSettings.apiUrl,
+        enumerable: false,
+        configurable: true,
+      });
+      if (strategyProvider === 'baidu') {
+        const baiduConfig = { ...requestConfig, apiSecret: resolvedSettings.apiSecret };
+        return await strategy.call(
+          resolvedSettings.apiKey,
+          baiduConfig as AIRequestConfig,
+          requestId
+        );
       }
-      return await strategy.call(settings.apiKey, config, requestId);
+      return await strategy.call(resolvedSettings.apiKey, requestConfig, requestId);
     }
     throw new Error(`暂不支持的 AI 提供商: ${model.provider}，请检查模型配置。`);
   } catch (error) {

@@ -2,6 +2,7 @@
  * Google Gemini Provider Strategy
  */
 
+import { resolveGoogleEndpoint } from '@/core/config/ai-connection-settings';
 import type { AIRequestConfig, AIResponse } from '@/shared/types/ai-core';
 
 import { BaseAIProviderStrategy } from './base';
@@ -10,19 +11,20 @@ export class GoogleStrategy extends BaseAIProviderStrategy {
   readonly name = 'google';
 
   async call(apiKey: string, config: AIRequestConfig): Promise<AIResponse> {
+    const { endpoint, ...requestBody } = config;
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${apiKey}`,
+      `${resolveGoogleEndpoint(endpoint || '', config.model)}?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: config.messages.map((m) => ({
+          contents: requestBody.messages.map((m) => ({
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: m.content }],
           })),
           generationConfig: {
-            temperature: config.temperature,
-            maxOutputTokens: config.max_tokens,
+            temperature: requestBody.temperature,
+            maxOutputTokens: requestBody.max_tokens,
           },
         }),
       }
