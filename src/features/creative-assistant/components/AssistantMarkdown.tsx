@@ -1,11 +1,15 @@
 import React from 'react';
 
+import { ASSISTANT_CHAT_SURFACE } from '../assistant-chat-surface';
+import { tryParseInfoRows } from '../assistant-info-layout';
 import {
   parseAssistantMarkdown,
   parseAssistantMarkdownInline,
   type AssistantMarkdownBlock,
   type AssistantMarkdownInlinePart,
 } from '../assistant-markdown';
+
+import { AssistantInfoCard } from './AssistantInfoCard';
 
 function InlineText({ text }: { text: string }) {
   return (
@@ -22,7 +26,7 @@ function InlinePart({ part }: { part: AssistantMarkdownInlinePart }) {
     case 'text':
       return <>{part.value}</>;
     case 'strong':
-      return <strong className="font-semibold text-white">{part.value}</strong>;
+      return <strong className="font-semibold">{part.value}</strong>;
     case 'em':
       return <em className="italic text-slate-100">{part.value}</em>;
     case 'code':
@@ -64,6 +68,10 @@ function MarkdownBlock({ block, index }: { block: AssistantMarkdownBlock; index:
       );
     }
     case 'list': {
+      const infoRows = tryParseInfoRows(block.items.join('\n'));
+      if (infoRows) {
+        return <AssistantInfoCard rows={infoRows} />;
+      }
       const ListTag = block.ordered ? 'ol' : 'ul';
       return (
         <ListTag
@@ -91,12 +99,17 @@ function MarkdownBlock({ block, index }: { block: AssistantMarkdownBlock; index:
           <code>{block.text}</code>
         </pre>
       );
-    case 'paragraph':
+    case 'paragraph': {
+      const infoRows = tryParseInfoRows(block.text);
+      if (infoRows) {
+        return <AssistantInfoCard rows={infoRows} />;
+      }
       return (
         <p className="whitespace-pre-wrap break-words leading-6">
           <InlineText text={block.text} />
         </p>
       );
+    }
     default: {
       const exhaustive: never = block;
       return exhaustive;
@@ -108,7 +121,7 @@ export function AssistantMarkdown({ content }: { content: string }) {
   const blocks = parseAssistantMarkdown(content);
   if (blocks.length === 0) return null;
   return (
-    <div data-testid="creative-assistant-markdown" className="space-y-3 text-sm text-slate-50">
+    <div data-testid="creative-assistant-markdown" className={ASSISTANT_CHAT_SURFACE.markdown}>
       {blocks.map((block, index) => (
         <MarkdownBlock key={`${block.type}-${index}`} block={block} index={index} />
       ))}

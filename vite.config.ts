@@ -81,6 +81,11 @@ export default defineConfig(({ command }) => {
       host: '127.0.0.1',
       port: 1420,
       strictPort: false,
+      // Tauri dev runs Vite and Cargo in parallel; on Windows, watching Rust
+      // build artifacts under target/ causes EBUSY file-lock errors.
+      watch: {
+        ignored: ['**/target/**', '**/src-tauri/**'],
+      },
       proxy:
         dialogueProxyEnabled && dialogueProxyTarget
           ? {

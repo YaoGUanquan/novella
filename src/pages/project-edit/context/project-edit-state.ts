@@ -59,7 +59,8 @@ export interface ProjectEditActions {
   generateVoices: () => Promise<void>;
   setAudioConfig: (config: AudioTrackConfig) => void;
   // 导出 / 保存
-  saveProject: (overrides?: { characters?: Character[] }) => Promise<boolean>;
+  saveProject: (overrides?: { characters?: Character[]; content?: string }) => Promise<boolean>;
+  setContent: (content: string) => void;
   exportReviewNotes: () => Promise<void>;
   locateIssueFrame: (issue: QualityGateIssue) => void;
   // 剧本

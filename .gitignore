@@ -42,6 +42,7 @@ test-results/
 playwright-report/
 .playwright/
 .playwright-cli/
+output/
 
 # Jest cache
 .jest-cache/
@@ -65,6 +66,7 @@ docs/ui-redesign/
 report/
 jscpd-report/
 jscpd-report.json
+docs/reports/
 
 # Editor/IDE backup leftovers
 *.orig

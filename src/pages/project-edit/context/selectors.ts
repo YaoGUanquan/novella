@@ -105,6 +105,7 @@ export function useStepCharacterContext() {
     content: state.content,
     characters: state.characters,
     onChange: actions.setCharacters,
+    onContentChange: actions.setContent,
     onSaveProject: actions.saveProject,
   };
 }

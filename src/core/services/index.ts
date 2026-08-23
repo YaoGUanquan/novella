@@ -61,6 +61,14 @@ export type { PipelineScene, PipelineProgress } from './domain/manga-pipeline-se
 
 // 核心服务
 export { aiService, type AIResponse, type AIRequestConfig } from './ai/text/ai-service';
+export { CreativeAssistantAgent, createCreativeAssistantAgent } from './ai/assistant-agent';
+export type {
+  AgentActionResult,
+  AssistantAgentEvent,
+  AssistantAgentImage,
+  AssistantAgentSnapshot,
+  CreativeAssistantAgentDependencies,
+} from './ai/assistant-agent';
 export { novelService } from './ai/text/novel-service';
 export { novelAnalyzer } from './ai/text/novel-analyze-service';
 export { scriptImportService } from './ai/text/script-import-service';

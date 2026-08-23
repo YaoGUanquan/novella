@@ -9,6 +9,8 @@ import { tauriService } from '@/core/services';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
 import { useProjectStore } from '@/shared/stores/project-store';
 
+import { mergeProjectLoadSources, selectProjectLoadFallback } from './project-load-merge';
+
 /** Page-local extension of canonical ProjectData with strongly-typed fields. */
 export interface ProjectEditData extends ProjectData {
   name: string;
@@ -59,9 +61,11 @@ export function useProjectLoader(projectId: string | undefined): {
 
     const loadFromStore = () => {
       const storeState = useProjectStore.getState();
-      const fallbackProject =
-        storeState.projects.find((p: any) => String(p.id) === String(projectId)) ||
-        storeState.currentProject;
+      const fallbackProject = selectProjectLoadFallback(
+        storeState.projects,
+        storeState.currentProject,
+        projectId
+      );
 
       if (fallbackProject) {
         const search = new URLSearchParams(location.search);
@@ -102,10 +106,12 @@ export function useProjectLoader(projectId: string | undefined): {
       return false;
     };
 
-    // 先打通 Zustand Store 快速路径
-    if (loadFromStore()) return;
+    // Zustand 列表只作首屏。确认保存写入的是工程文件，列表里可能没有 characters。
+    const storeLoaded = loadFromStore();
+    if (!storeLoaded) {
+      setLoading(true);
+    }
 
-    setLoading(true);
     tauriService
       .readProjectFile(projectId)
       .then((projectText) => {
@@ -124,7 +130,7 @@ export function useProjectLoader(projectId: string | undefined): {
           }
         }
 
-        setData({
+        const fileData: ProjectLoadResult = {
           name: project.name,
           description: project.description ?? '',
           content: project.content,
@@ -141,11 +147,12 @@ export function useProjectLoader(projectId: string | undefined): {
           exportSettings: project.exportSettings,
           initialStep,
           frameId: frameId ?? undefined,
-        });
+        };
+        setData((current) => mergeProjectLoadSources(current, fileData));
         setError(null);
       })
       .catch(() => {
-        if (!loadFromStore()) {
+        if (!storeLoaded && !loadFromStore()) {
           // 如果都未匹配到，以保底项目数据进入
           const search = new URLSearchParams(location.search);
           const stepValue = search.get('step');

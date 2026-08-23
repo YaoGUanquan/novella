@@ -8,6 +8,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -25,6 +26,11 @@ import type { FrameComment, StoryboardVersion } from '@/core/services/domain/col
 import type { StoryboardFrame } from '@/core/storyboard/types/storyboard';
 import type { ScriptImportMetadata } from '@/features/storyboard/components/NovelImporter';
 import { useStoryboard } from '@/stores/storyboard/storyboard-store';
+
+import {
+  buildProjectHydrationKey,
+  shouldHydrateProjectCharacters,
+} from '../hooks/project-load-merge';
 
 import { initialProjectEditState, type ProjectEditContextValue } from './project-edit-state';
 import { useProjectEditActions } from './useProjectEditActions';
@@ -83,6 +89,8 @@ export function ProjectEditProvider({
   } = storyboard;
   const effectiveProjectId = project?.id ?? projectId;
   const hydratedDataKeyRef = useRef<string | null>(null);
+  const characterEditsProjectIdRef = useRef(effectiveProjectId);
+  const hasLocalCharacterEditsRef = useRef(false);
 
   // ─── State ────────────────────────────────────────────────────────────────
   const [content, setContent] = useState(initialData?.content ?? initialProjectEditState.content);
@@ -118,17 +126,28 @@ export function ProjectEditProvider({
   const [composition, setComposition] = useState<CompositionProject | null>(
     initialData?.composition ?? initialProjectEditState.composition
   );
+  const setCharactersFromEditor = useCallback((nextCharacters: Character[]) => {
+    hasLocalCharacterEditsRef.current = true;
+    setCharacters(nextCharacters);
+  }, []);
 
   // 动态同步异步加载的项目数据与指定初始步骤 (Step 0 -> Step 3)
   useEffect(() => {
+    if (characterEditsProjectIdRef.current !== effectiveProjectId) {
+      characterEditsProjectIdRef.current = effectiveProjectId;
+      hasLocalCharacterEditsRef.current = false;
+      hydratedDataKeyRef.current = null;
+    }
     if (initialData) {
-      const dataKey = [
-        effectiveProjectId ?? '',
-        initialData.content ?? '',
-        initialData.storyboardFrames?.length ?? 0,
-        initialData.storyboardComments?.length ?? 0,
-        initialData.storyboardVersions?.length ?? 0,
-      ].join(':');
+      const dataKey = buildProjectHydrationKey({
+        projectId: effectiveProjectId,
+        content: initialData.content,
+        storyboardFramesLength: initialData.storyboardFrames?.length,
+        storyboardCommentsLength: initialData.storyboardComments?.length,
+        storyboardVersionsLength: initialData.storyboardVersions?.length,
+        charactersLength: initialData.characters?.length,
+        characters: initialData.characters,
+      });
       if (hydratedDataKeyRef.current === dataKey) return;
       hydratedDataKeyRef.current = dataKey;
       if (initialData.content) {
@@ -137,7 +156,12 @@ export function ProjectEditProvider({
       if (initialData.storyAnalysis) {
         setStoryAnalysis(initialData.storyAnalysis);
       }
-      if (initialData.characters && initialData.characters.length > 0) {
+      if (
+        shouldHydrateProjectCharacters({
+          hasLocalCharacterEdits: hasLocalCharacterEditsRef.current,
+          incomingCharacters: initialData.characters,
+        })
+      ) {
         setCharacters(initialData.characters);
       }
       const frames = asStoryboardFrames(initialData.storyboardFrames);
@@ -176,10 +200,11 @@ export function ProjectEditProvider({
     setAudioConfig,
     setAudioEditorKey,
     setAudioGenerating,
-    setCharacters,
+    setCharacters: setCharactersFromEditor,
     setComposition,
     setFocusFrameId,
     project: project as { id: string; name: string; createdAt: string } | null,
+    projectId: effectiveProjectId,
     setSaving,
     updateProject: updateProject as (updates: Record<string, unknown>) => void,
     setCurrentStep,

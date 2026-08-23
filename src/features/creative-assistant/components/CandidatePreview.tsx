@@ -1,5 +1,9 @@
 import React from 'react';
 
+import { cn } from '@/shared/utils/class-names';
+
+import { ASSISTANT_CHAT_SURFACE } from '../assistant-chat-surface';
+import { ASSISTANT_CHAT_LAYOUT } from '../assistant-info-layout';
 import type { CandidatePreviewNode } from '../candidate-preview';
 import { buildCandidatePreview, isCompactPreviewValue } from '../candidate-preview';
 
@@ -17,14 +21,14 @@ function PreviewNode({ node }: { node: CandidatePreviewNode }) {
   switch (node.kind) {
     case 'field':
       return isCompactPreviewValue(node.value) ? (
-        <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] items-baseline gap-x-3 py-0.5">
-          <p className="text-[11px] leading-5 text-slate-300">{node.label}</p>
-          <p className="min-w-0 break-words text-sm leading-5 text-white">{node.value}</p>
+        <div className={cn(ASSISTANT_CHAT_LAYOUT.row, 'py-0.5')}>
+          <p className={ASSISTANT_CHAT_SURFACE.inkOnDark.label}>{node.label}</p>
+          <p className={cn(ASSISTANT_CHAT_SURFACE.inkOnDark.value, 'min-w-0')}>{node.value}</p>
         </div>
       ) : (
-        <div className="space-y-0.5 py-0.5">
-          <p className="text-[11px] leading-5 text-slate-300">{node.label}</p>
-          <p className="whitespace-pre-wrap break-words text-sm leading-5 text-white">
+        <div className={cn(ASSISTANT_CHAT_LAYOUT.stackedRow, 'py-0.5')}>
+          <p className={ASSISTANT_CHAT_SURFACE.inkOnDark.label}>{node.label}</p>
+          <p className={cn(ASSISTANT_CHAT_SURFACE.inkOnDark.value, 'whitespace-pre-wrap')}>
             {node.value}
           </p>
         </div>

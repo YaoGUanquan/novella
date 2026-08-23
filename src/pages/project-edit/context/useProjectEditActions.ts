@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from '@/components/ui/toast';
 import type { AudioTrackConfig } from '@/core/audio/types/audio';
 import type { CompositionProject } from '@/core/audio/types/composition';
+import type { ProjectData } from '@/core/project/types/project';
 import type { Character, StoryAnalysis } from '@/core/script/types/novel';
 import {
   audioPipelineService,
@@ -27,6 +28,12 @@ import type { ScriptImportMetadata } from '@/features/storyboard/components/Nove
 import { type StoryboardState, useStoryboard } from '@/stores/storyboard/storyboard-store';
 
 import { initialProjectEditState, type ProjectEditActions } from './project-edit-state';
+import {
+  getProjectPersistBlocker,
+  resolveProjectPersistContent,
+  resolveProjectPersistId,
+} from './project-save-guard';
+import { syncPersistedProjectToStore } from './project-store-sync';
 
 export interface UseProjectEditActionsParams {
   // State
@@ -47,6 +54,7 @@ export interface UseProjectEditActionsParams {
   setFocusFrameId: (v: string | undefined) => void;
   // Project & steps
   project: { id: string; name: string; createdAt: string } | null | undefined;
+  projectId?: string;
   setSaving: (v: boolean) => void;
   updateProject: (updates: Record<string, unknown>) => void;
   setCurrentStep: (step: number) => void;
@@ -87,6 +95,7 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
     setComposition,
     setFocusFrameId,
     project,
+    projectId,
     setSaving,
     updateProject,
     setCurrentStep,
@@ -391,14 +400,25 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
 
   // ─── Save / Export ────────────────────────────────────────────────────────
   const saveProject = useCallback(
-    async (overrides?: { characters?: Character[] }) => {
+    async (overrides?: { characters?: Character[]; content?: string }) => {
       try {
-        if (!projectMetadata.name.trim()) {
-          toast.error('请填写项目名称');
-          return false;
-        }
-        if (!content) {
-          toast.error('请先导入小说/剧本内容');
+        const persistCharacters = overrides?.characters ?? characters;
+        const persistContent = resolveProjectPersistContent({
+          name: projectMetadata.name,
+          content: overrides?.content ?? content,
+          description: projectMetadata.description,
+          script: scriptTextRef.current,
+          characterCount: persistCharacters.length,
+        });
+        const persistBlocker = getProjectPersistBlocker({
+          name: projectMetadata.name,
+          content: overrides?.content ?? content,
+          description: projectMetadata.description,
+          script: scriptTextRef.current,
+          characterCount: persistCharacters.length,
+        });
+        if (persistBlocker) {
+          toast.error(persistBlocker);
           return false;
         }
         setSaving(true);
@@ -407,10 +427,10 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
         // just-confirmed storyboard draft is persisted in this same action.
         const persistedStoryboardFrames = useStoryboard.getState().frames;
         const projectData = {
-          id: project?.id ?? uuidv4(),
+          id: resolveProjectPersistId(project?.id, projectId, uuidv4),
           name: projectMetadata.name.trim(),
           description: projectMetadata.description.trim(),
-          content: content,
+          content: persistContent || undefined,
           createdAt: project?.createdAt ?? now,
           updatedAt: now,
           novelMetadata: novelMetadata ?? undefined,
@@ -419,10 +439,7 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
             persistedStoryboardFrames.length > 0 ? persistedStoryboardFrames : undefined,
           storyboardComments: storyboard.comments.length > 0 ? storyboard.comments : undefined,
           storyboardVersions: storyboard.versions.length > 0 ? storyboard.versions : undefined,
-          characters:
-            (overrides?.characters ?? characters).length > 0
-              ? (overrides?.characters ?? characters)
-              : undefined,
+          characters: persistCharacters.length > 0 ? persistCharacters : undefined,
           composition: composition ?? undefined,
           audioConfig: audioConfig,
           exportPreset: projectMetadata.exportPreset,
@@ -430,8 +447,12 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
           script: scriptTextRef.current || undefined,
         };
         await tauriService.saveProjectFile(projectData.id, JSON.stringify(projectData));
+        if (overrides?.content !== undefined) {
+          setContent(overrides.content);
+        }
         toast.success('项目保存成功');
         updateProject(projectData as Parameters<typeof updateProject>[0]);
+        syncPersistedProjectToStore(projectData as ProjectData);
         return true;
       } catch (error) {
         logger.error('保存项目失败:', error);
@@ -443,7 +464,9 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
     },
     [
       content,
+      setContent,
       project,
+      projectId,
       projectMetadata,
       novelMetadata,
       storyAnalysis,
@@ -537,6 +560,7 @@ export function useProjectEditActions(params: UseProjectEditActionsParams): Proj
     generateVoices,
     setAudioConfig: setAudioConfig as ProjectEditActions['setAudioConfig'],
     saveProject,
+    setContent,
     exportReviewNotes,
     locateIssueFrame,
     exportScript,

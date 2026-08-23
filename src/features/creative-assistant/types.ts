@@ -9,6 +9,16 @@ export interface CreativeAssistantAttachment {
   dataUrl: string;
 }
 
+export interface GeneratedImageAsset {
+  id: string;
+  prompt: string;
+  previewUrl: string;
+  relativePath?: string;
+  mimeType?: string;
+  size?: number;
+  createdAt: string;
+}
+
 export interface CreativeAssistantGlossaryEntry {
   term: string;
   meaning: string;
@@ -45,6 +55,7 @@ export interface CreativeAssistantMessage {
   role: CreativeAssistantMessageRole;
   content: string;
   attachments?: CreativeAssistantAttachment[];
+  generatedImages?: GeneratedImageAsset[];
   state?: CreativeAssistantState;
   stateSaved?: boolean;
   thinking?: string;

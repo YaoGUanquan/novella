@@ -30,6 +30,10 @@ import { retryRequest } from '@/shared/utils';
 import { generateRemoteVideo } from '../video/remote-video-service';
 
 import { generateWithConfiguredImage } from './configured-image-service';
+import {
+  describeImageGenerationFailure,
+  MISSING_IMAGE_SERVICE_MESSAGE,
+} from './image-generation/errors';
 import { generateWithKling, generateVideoWithKling } from './image-generation/providers/kling';
 import { generateVideoWithSeedance } from './image-generation/providers/seedance';
 import { generateWithSeedream } from './image-generation/providers/seedream';
@@ -67,37 +71,47 @@ export async function generateImage(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): Promise<ImageGenerationResult> {
-  const configured = await generateWithConfiguredImage(prompt, options);
-  if (configured) return configured;
-  const model = options.model ?? 'seedream-5.0';
-  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-
-  const provider = (() => {
-    switch (model) {
-      case 'seedream-5.0':
-        return generateWithSeedream;
-      case 'kling-1.6':
-        return generateWithKling;
-      case 'vidu-2.0':
-        return generateWithVidu;
-      default:
-        return generateWithSeedream;
+  try {
+    const configured = await generateWithConfiguredImage(prompt, options);
+    if (configured) return configured;
+    const model = options.model ?? 'seedream-5.0';
+    const fallbackService =
+      model === 'kling-1.6' ? 'kling' : model === 'vidu-2.0' ? 'vidu' : 'seedream';
+    const fallbackKey = await getAPIKey(fallbackService);
+    if (!fallbackKey.trim()) {
+      throw new Error(MISSING_IMAGE_SERVICE_MESSAGE);
     }
-  })();
+    const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
 
-  if (maxRetries <= 0) {
-    return provider(prompt, options);
+    const provider = (() => {
+      switch (model) {
+        case 'seedream-5.0':
+          return generateWithSeedream;
+        case 'kling-1.6':
+          return generateWithKling;
+        case 'vidu-2.0':
+          return generateWithVidu;
+        default:
+          return generateWithSeedream;
+      }
+    })();
+
+    if (maxRetries <= 0) {
+      return await provider(prompt, options);
+    }
+
+    return await retryRequest(() => provider(prompt, options), {
+      maxRetries,
+      delay: 1000,
+      backoff: 'exponential',
+      retryCondition: isNetworkError,
+      onRetry: (attempt, error) => {
+        logger.warn(`[ImageGen] ${model} 生成失败，尝试第 ${attempt} 次: ${error}`);
+      },
+    });
+  } catch (error) {
+    throw new Error(describeImageGenerationFailure(error));
   }
-
-  return retryRequest(() => provider(prompt, options), {
-    maxRetries,
-    delay: 1000,
-    backoff: 'exponential',
-    retryCondition: isNetworkError,
-    onRetry: (attempt, error) => {
-      logger.warn(`[ImageGen] ${model} 生成失败，尝试第 ${attempt} 次: ${error}`);
-    },
-  });
 }
 
 /**

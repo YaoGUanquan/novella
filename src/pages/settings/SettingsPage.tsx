@@ -46,7 +46,8 @@ const SERVICE_META: Record<
   },
   image: {
     title: '图片生成模型',
-    description: '用于角色立绘、分镜和场景图片生成。',
+    description:
+      '用于角色立绘、分镜和场景图片生成。请填 OpenAI 兼容地址，例如 https://你的sub2api/v1，模型如 grok-imagine-image。桌面端走原生 HTTPS，不走浏览器跨域。',
     icon: ImageIcon,
   },
   video: {
@@ -144,7 +145,11 @@ const SettingsPage = () => {
   const handleSaveWorkingDir = (value: string) => {
     const trimmed = value.trim();
     setWorkingDir(trimmed);
-    if (trimmed) localStorage.setItem('novella_working_dir', trimmed);
+    if (trimmed) {
+      localStorage.setItem('novella_working_dir', trimmed);
+    } else {
+      localStorage.removeItem('novella_working_dir');
+    }
   };
 
   const handleSelectWorkingDir = async () => {
@@ -271,8 +276,7 @@ const SettingsPage = () => {
         <div className="flex items-center gap-2">
           <Input
             value={workingDir}
-            onChange={(event) => setWorkingDir(event.target.value)}
-            onBlur={(event) => handleSaveWorkingDir(event.target.value)}
+            onChange={(event) => handleSaveWorkingDir(event.target.value)}
             placeholder="例如 D:\\NovellaWorkspace"
             className="bg-transparent text-xs font-mono flex-1"
           />

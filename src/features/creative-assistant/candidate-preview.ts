@@ -53,6 +53,9 @@ const FIELD_LABELS: Record<string, string> = {
   sceneDescription: '场景',
   cameraType: '镜头',
   duration: '时长',
+  outline: '剧情大纲',
+  story: '剧情大纲',
+  characters: '角色',
 };
 
 const VALUE_LABELS: Record<string, string> = {

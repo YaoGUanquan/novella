@@ -7,4 +7,5 @@
 pub mod app;
 pub mod dialogue;
 pub mod file;
+pub mod image;
 pub mod video;

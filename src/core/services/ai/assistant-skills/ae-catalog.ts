@@ -18,7 +18,7 @@ export const PRODUCT_ASSISTANT_SKILLS: AssistantSkill[] = [
     sideEffect: 'candidate-proposal',
     visibility: 'always-on',
     instruction:
-      '仅在用户明确要求生成草稿、补全当前表单，或当前目标是角色设定且已确认主角姓名时调用。按调用方格式输出完整候选稿（角色须含外观与服饰）。不要声称已经回填或保存表单。',
+      '仅在用户明确要求生成草稿、补全当前表单，或当前目标是角色设定且已确认主角姓名时调用。按调用方格式输出完整候选稿：角色须含外观与服饰；项目正文为空或用户要大纲时，必须同时根据角色生成 outline。不要声称已经回填或保存表单。',
   },
   {
     id: 'propose-memory',

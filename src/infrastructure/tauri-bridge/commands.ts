@@ -633,6 +633,80 @@ class TauriService {
   async isGlobalShortcutRegistered(shortcut: string): Promise<boolean> {
     return invoke('is_global_shortcut_registered', { shortcut });
   }
+
+  /**
+   * POST an OpenAI-compatible image request through Rust so the WebView
+   * does not hit CORS. The API key stays in the native command.
+   */
+  async generateConfiguredImage(request: {
+    endpoint: string;
+    apiKey: string;
+    model: string;
+    prompt: string;
+    size?: string;
+    resolution?: string;
+    n?: number;
+  }): Promise<unknown> {
+    if (!isTauriRuntime()) {
+      throw new Error('原生图片传输仅在桌面端可用');
+    }
+    return invoke('generate_configured_image', {
+      request: {
+        endpoint: request.endpoint,
+        api_key: request.apiKey,
+        model: request.model,
+        prompt: request.prompt,
+        size: request.size,
+        resolution: request.resolution,
+        n: request.n,
+      },
+    });
+  }
+
+  async downloadImageAsset(request: {
+    sourceUrl?: string;
+    bytes?: number[];
+    mimeType?: string;
+    workingDir: string;
+    projectId: string;
+    filename?: string;
+  }): Promise<{
+    absolute_path: string;
+    relative_path: string;
+    mime_type: string;
+    size: number;
+  }> {
+    if (!isTauriRuntime()) {
+      throw new Error('原生图片下载仅在桌面端可用');
+    }
+    return invoke('download_image_asset', {
+      request: {
+        source_url: request.sourceUrl,
+        bytes: request.bytes,
+        mime_type: request.mimeType,
+        working_dir: request.workingDir,
+        project_id: request.projectId,
+        filename: request.filename,
+      },
+    });
+  }
+
+  async readImageAsset(request: {
+    workingDir: string;
+    projectId: string;
+    relativePath: string;
+  }): Promise<{ bytes: number[]; mime_type: string; size: number }> {
+    if (!isTauriRuntime()) {
+      throw new Error('原生图片读取仅在桌面端可用');
+    }
+    return invoke('read_image_asset', {
+      request: {
+        working_dir: request.workingDir,
+        project_id: request.projectId,
+        relative_path: request.relativePath,
+      },
+    });
+  }
 }
 
 // 导出单例

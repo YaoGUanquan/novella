@@ -3,7 +3,11 @@ import {
   normalizeCreativeAssistantState,
   parseCreativeAssistantResponse,
 } from './creative-assistant-memory';
-import type { CreativeAssistantAgentStep, CreativeAssistantMessage } from './types';
+import type {
+  CreativeAssistantAgentStep,
+  CreativeAssistantMessage,
+  GeneratedImageAsset,
+} from './types';
 
 const STORAGE_PREFIX = 'novella_creative_assistant_session_v1:';
 
@@ -27,6 +31,19 @@ function parseStoredMessage(value: unknown): CreativeAssistantMessage | null {
       : { content: message.content, state: null };
   const state = parsed.state ?? normalizeCreativeAssistantState(message.state);
   const agentSteps = parseStoredAgentSteps((message as { agentSteps?: unknown }).agentSteps);
+  const generatedImages = Array.isArray(message.generatedImages)
+    ? message.generatedImages.flatMap((item) => {
+        if (
+          typeof item !== 'object' ||
+          item === null ||
+          typeof (item as GeneratedImageAsset).id !== 'string' ||
+          typeof (item as GeneratedImageAsset).prompt !== 'string' ||
+          typeof (item as GeneratedImageAsset).previewUrl !== 'string'
+        )
+          return [];
+        return [item as GeneratedImageAsset];
+      })
+    : [];
   return {
     id: message.id,
     role: message.role,
@@ -34,6 +51,7 @@ function parseStoredMessage(value: unknown): CreativeAssistantMessage | null {
     ...(state ? { state } : {}),
     ...(message.stateSaved ? { stateSaved: true } : {}),
     ...(agentSteps ? { agentSteps } : {}),
+    ...(generatedImages.length ? { generatedImages } : {}),
   };
 }
 
@@ -60,22 +78,34 @@ export function saveCreativeAssistantSession(
   if (!projectId || typeof window === 'undefined') return;
   try {
     // File data can exceed storage quotas; attachments remain in the active dialog only.
-    const persisted = messages.map(({ id, role, content, state, stateSaved, agentSteps }) => ({
-      id,
-      role,
-      content,
-      ...(state ? { state } : {}),
-      ...(stateSaved ? { stateSaved: true } : {}),
-      ...(agentSteps?.length
-        ? {
-            agentSteps: agentSteps.map((step: CreativeAssistantAgentStep) => ({
-              id: step.id,
-              label: step.label,
-              status: step.status,
-            })),
-          }
-        : {}),
-    }));
+    const persisted = messages.map(
+      ({ id, role, content, state, stateSaved, agentSteps, generatedImages }) => ({
+        id,
+        role,
+        content,
+        ...(state ? { state } : {}),
+        ...(stateSaved ? { stateSaved: true } : {}),
+        ...(agentSteps?.length
+          ? {
+              agentSteps: agentSteps.map((step: CreativeAssistantAgentStep) => ({
+                id: step.id,
+                label: step.label,
+                status: step.status,
+              })),
+            }
+          : {}),
+        ...(generatedImages?.length
+          ? {
+              generatedImages: generatedImages.map((image) => ({
+                ...image,
+                // Absolute asset URLs are derived from the current workspace and
+                // must be rebuilt from the canonical relative path after reload.
+                previewUrl: image.relativePath ? '' : image.previewUrl,
+              })),
+            }
+          : {}),
+      })
+    );
     window.localStorage.setItem(storageKey(projectId), JSON.stringify(persisted));
   } catch {
     // Conversation persistence is optional and must not interrupt creation.

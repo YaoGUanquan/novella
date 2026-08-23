@@ -13,7 +13,14 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -28,6 +35,10 @@ import type { DialogueStreamEvent } from '@/core/ai/dialogue-stream-events';
 import type { AIRequestConfig } from '@/core/ai/types/ai-core';
 import { aiService } from '@/core/services';
 import {
+  createCreativeAssistantAgent,
+  type CreativeAssistantAgent,
+} from '@/core/services/ai/assistant-agent';
+import {
   assistantSkillRegistry,
   PRODUCT_ASSISTANT_SKILL_IDS,
   type AssistantSkillId,
@@ -37,13 +48,15 @@ import { ConfiguredDialogueError } from '@/core/services/ai/text/ai-service';
 import { Button } from '@/shared/components/ui/button';
 import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { cn } from '@/shared/utils/class-names';
 
 import { createAgentTimeline, failRunningAgentSteps, finishAgentTimeline } from '../agent-timeline';
+import { ASSISTANT_CHAT_SURFACE } from '../assistant-chat-surface';
+import { rowsFromAssistantState, rowsFromMemorySummary } from '../assistant-info-layout';
 import { looksLikeStructuredDraft, isSameStructuredDraft } from '../candidate-preview';
 import {
   buildCreativeAssistantSystemPrompt,
   clearCreativeAssistantMemory,
-  EMPTY_CREATIVE_ASSISTANT_MEMORY,
   formatCreativeAssistantMemory,
   hideCreativeAssistantStateMarker,
   isCreativeAssistantStateApplied,
@@ -56,15 +69,18 @@ import {
   loadCreativeAssistantSession,
   saveCreativeAssistantSession,
 } from '../creative-assistant-session';
+import { assistantUIReducer, createAssistantUIState } from '../creative-assistant-ui-reducer';
+import { isImageGenerationRequest } from '../image-generation-intent';
 import type {
   CreativeAssistantAttachment,
-  CreativeAssistantCandidate,
-  CreativeAssistantMemory,
   CreativeAssistantMessage,
   CreativeAssistantState,
+  GeneratedImageAsset,
 } from '../types';
 
 import { AgentThinkingTrace } from './AgentThinkingTrace';
+import { AssistantChatBubble } from './AssistantChatBubble';
+import { AssistantInfoCard } from './AssistantInfoCard';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { CandidatePreview } from './CandidatePreview';
 
@@ -85,8 +101,14 @@ export interface AICreativeAssistantSheetProps<T> {
   parseCandidate: (raw: string) => T;
   onApply: (candidate: T) => void;
   autoPreviewCandidate?: boolean;
-  onPersist?: () => void | Promise<void>;
+  onPersist?: () => void | boolean | Promise<void | boolean>;
   persistLabel?: string;
+  onGenerateImage?: (
+    prompt: string,
+    latestImage?: GeneratedImageAsset
+  ) => Promise<GeneratedImageAsset>;
+  resolveGeneratedImageUrl?: (image: GeneratedImageAsset) => string | Promise<string>;
+  generatedImageEvents?: GeneratedImageAsset[];
 }
 
 function messageId(): string {
@@ -95,6 +117,72 @@ function messageId(): string {
 
 function attachmentId(): string {
   return `attachment-${messageId()}`;
+}
+
+function AssistantGeneratedImage({
+  image,
+  resolveUrl,
+}: {
+  image: GeneratedImageAsset;
+  resolveUrl?: (image: GeneratedImageAsset) => string | Promise<string>;
+}) {
+  const [source, setSource] = useState('');
+  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
+
+  useEffect(() => {
+    let active = true;
+    let loadedSource = '';
+    setSource('');
+    setState('loading');
+    void Promise.resolve(resolveUrl?.(image) || image.previewUrl)
+      .then((nextSource) => {
+        loadedSource = nextSource;
+        if (!active) {
+          if (nextSource.startsWith('blob:')) URL.revokeObjectURL(nextSource);
+          return;
+        }
+        if (!nextSource) {
+          setState('failed');
+          return;
+        }
+        setSource(nextSource);
+      })
+      .catch(() => {
+        if (active) setState('failed');
+      });
+    return () => {
+      active = false;
+      if (loadedSource.startsWith('blob:')) URL.revokeObjectURL(loadedSource);
+    };
+  }, [image, resolveUrl]);
+
+  return (
+    <figure className="space-y-1">
+      <div className="relative flex h-56 w-full items-center justify-center overflow-hidden rounded-md border border-indigo-300/30 bg-slate-950">
+        {state === 'loading' && <span className="text-xs text-slate-400">图片加载中...</span>}
+        {state === 'failed' ? (
+          <span className="px-3 text-center text-xs text-rose-300">
+            图片加载失败，请检查项目工作目录
+          </span>
+        ) : source ? (
+          <img
+            src={source}
+            alt={`AI 生成图片：${image.prompt}`}
+            className={cn(
+              'absolute inset-0 h-full w-full object-contain transition-opacity',
+              state === 'ready' ? 'opacity-100' : 'opacity-0'
+            )}
+            onLoad={() => setState('ready')}
+            onError={() => setState('failed')}
+          />
+        ) : null}
+      </div>
+      <figcaption className="break-all text-[11px] text-slate-400">
+        <span className="block text-slate-300">{image.prompt}</span>
+        <span className="block">{image.relativePath ?? '浏览器临时地址'}</span>
+      </figcaption>
+    </figure>
+  );
 }
 
 function AssistantReplyBody({
@@ -232,25 +320,33 @@ export function AICreativeAssistantSheet<T>({
   autoPreviewCandidate = false,
   onPersist,
   persistLabel = '保存',
+  onGenerateImage,
+  resolveGeneratedImageUrl,
+  generatedImageEvents = [],
 }: AICreativeAssistantSheetProps<T>) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<CreativeAssistantMessage[]>([]);
   const [attachments, setAttachments] = useState<CreativeAssistantAttachment[]>([]);
-  const [candidate, setCandidate] = useState<CreativeAssistantCandidate<T> | null>(null);
-  const [candidateRaw, setCandidateRaw] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [generating, setGenerating] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [memory, setMemory] = useState<CreativeAssistantMemory>({
-    ...EMPTY_CREATIVE_ASSISTANT_MEMORY,
-  });
-  const [memoryReady, setMemoryReady] = useState(false);
-  const [conversationVersion, setConversationVersion] = useState(0);
   const [selectedSkillIds, setSelectedSkillIds] = useState<CatalogAssistantSkillId[]>([]);
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [uiState, dispatch] = useReducer(
+    assistantUIReducer<T>,
+    undefined,
+    createAssistantUIState<T>
+  );
+  const {
+    messages,
+    candidate,
+    candidateRaw,
+    error,
+    generating,
+    memory,
+    memoryReady,
+    sessionReady,
+    streamingMessageId,
+    conversationVersion,
+  } = uiState;
   const controllerRef = useRef<AbortController | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const skillMenuRef = useRef<HTMLDivElement | null>(null);
@@ -263,13 +359,19 @@ export function AICreativeAssistantSheet<T>({
       string,
       {
         requestMessages: AIRequestConfig['messages'];
-        onComplete?: (content: string, state: CreativeAssistantState | null) => void;
+        onComplete?: (
+          content: string,
+          state: CreativeAssistantState | null,
+          assistantId: string
+        ) => string | void | Promise<string | void>;
       }
     >
   >({});
   const loadedSessionProjectRef = useRef<string | undefined>(undefined);
   const loadedMemoryProjectRef = useRef<string | undefined>(undefined);
   const generateCandidateRef = useRef<(() => void) | null>(null);
+  const seenGeneratedImageEventsRef = useRef<Set<string>>(new Set());
+  const agentRef = useRef<CreativeAssistantAgent<CreativeAssistantState, T> | null>(null);
 
   useEffect(() => {
     if (sessionReady && loadedSessionProjectRef.current === projectId) {
@@ -292,20 +394,26 @@ export function AICreativeAssistantSheet<T>({
   }, [memory, memoryReady, projectId]);
 
   useEffect(() => {
-    setSessionReady(false);
-    setMemoryReady(false);
     loadedSessionProjectRef.current = projectId;
     loadedMemoryProjectRef.current = projectId;
-    setMessages(loadCreativeAssistantSession(projectId));
-    setMemory(loadCreativeAssistantMemory(projectId));
-    setCandidate(null);
-    setCandidateRaw(null);
-    setError('');
-    setConversationVersion(0);
+    dispatch({
+      type: 'hydrate',
+      messages: loadCreativeAssistantSession(projectId),
+      memory: loadCreativeAssistantMemory(projectId),
+    });
     initializedConversationRef.current = null;
-    setSessionReady(true);
-    setMemoryReady(true);
+    seenGeneratedImageEventsRef.current = new Set();
   }, [projectId]);
+
+  useEffect(() => {
+    if (!sessionReady || generatedImageEvents.length === 0) return;
+    const unseen = generatedImageEvents.filter(
+      (image) => !seenGeneratedImageEventsRef.current.has(image.id)
+    );
+    if (unseen.length === 0) return;
+    unseen.forEach((image) => seenGeneratedImageEventsRef.current.add(image.id));
+    dispatch({ type: 'external-images-added', images: unseen });
+  }, [generatedImageEvents, sessionReady]);
 
   const scrollToLatest = useCallback(() => {
     scrollTranscriptToLatest(transcriptEndRef.current);
@@ -347,11 +455,14 @@ export function AICreativeAssistantSheet<T>({
     return () => viewport.removeEventListener('scroll', onScroll);
   }, [open]);
 
-  const stopGeneration = () => controllerRef.current?.abort();
+  const stopGeneration = () => {
+    agentRef.current?.cancel();
+    controllerRef.current?.abort();
+  };
 
   const updateAssistantMessage = useCallback(
     (id: string, patch: Partial<CreativeAssistantMessage>) => {
-      setMessages((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+      dispatch({ type: 'assistant-patched', assistantId: id, patch });
     },
     []
   );
@@ -388,9 +499,17 @@ export function AICreativeAssistantSheet<T>({
   const runStream = useCallback(
     async (
       requestMessages: AIRequestConfig['messages'],
-      onComplete?: (content: string, state: CreativeAssistantState | null) => void,
+      onComplete?: (
+        content: string,
+        state: CreativeAssistantState | null,
+        assistantId: string
+      ) => string | void | Promise<string | void>,
       existingAssistantId?: string,
-      options: { followUpSkills?: boolean; initialSkillIds?: AssistantSkillId[] } = {}
+      options: {
+        followUpSkills?: boolean;
+        initialSkillIds?: AssistantSkillId[];
+        completeOnStreamError?: boolean;
+      } = {}
     ) => {
       controllerRef.current?.abort();
       const controller = new AbortController();
@@ -408,45 +527,80 @@ export function AICreativeAssistantSheet<T>({
         .filter((label): label is string => Boolean(label));
       let agentSteps = createAgentTimeline(skillLabels);
       let followUpCandidate = false;
-      setGenerating(true);
-      setStreamingMessageId(assistantId);
-      setError('');
-      setMessages((items) =>
-        existingAssistantId
-          ? items.map((item) =>
-              item.id === assistantId
-                ? {
-                    ...item,
-                    content: '',
-                    thinking: undefined,
-                    state: undefined,
-                    skillCalls: undefined,
-                    agentSteps,
-                  }
-                : item
-            )
-          : [
-              ...items,
-              {
-                id: assistantId,
-                role: 'assistant',
-                content: '',
-                agentSteps,
-              },
-            ]
-      );
+      dispatch({
+        type: 'turn-started',
+        assistantId,
+        message: existingAssistantId
+          ? {
+              id: assistantId,
+              role: 'assistant',
+              content: '',
+              thinking: undefined,
+              state: undefined,
+              skillCalls: undefined,
+              agentSteps,
+              generatedImages: undefined,
+            }
+          : { id: assistantId, role: 'assistant', content: '', agentSteps },
+        agentSteps,
+      });
       try {
-        for await (const event of configuredDialogueEvents(requestMessages, controller.signal)) {
-          if (controller.signal.aborted) break;
-          if (event.kind === 'thinking') continue;
-          response += event.text;
-          updateAssistantMessage(assistantId, {
-            content: hideCreativeAssistantStateMarker(response),
-          });
+        const agent = createCreativeAssistantAgent<CreativeAssistantState, T>({
+          projectId: projectId ?? targetLabel,
+          dialogue: {
+            stream: (_messages, signal) => configuredDialogueEvents(requestMessages, signal),
+          },
+          prompt: {
+            buildMessages: () =>
+              requestMessages.map(({ role, content }) => ({
+                role,
+                content:
+                  typeof content === 'string'
+                    ? content
+                    : content
+                        .map((part) => (part.type === 'text' ? part.text : '[image attachment]'))
+                        .join('\n'),
+              })),
+            parseResponse: (raw) => {
+              const parsed = parseCreativeAssistantResponse(raw);
+              return {
+                content: parsed.content,
+                state: parsed.state,
+                skillId: parsed.skillId,
+              };
+            },
+          },
+          image: onGenerateImage
+            ? { generate: (prompt, latestImage) => onGenerateImage(prompt, latestImage) }
+            : undefined,
+          target: {
+            parseCandidate,
+            applyCandidate: onApply,
+            persist: async () => (onPersist ? onPersist() : false),
+          },
+          id: () => assistantId,
+        });
+        agentRef.current = agent;
+        for await (const event of agent.sendTurn({
+          text: '',
+          selectedSkillIds: options.initialSkillIds ?? [],
+        })) {
+          if (event.type === 'text') {
+            response += event.text;
+            updateAssistantMessage(assistantId, {
+              content: hideCreativeAssistantStateMarker(response),
+            });
+          }
+          if (event.type === 'cancelled') {
+            controller.abort();
+          }
+          if (event.type === 'failed') {
+            throw event.error;
+          }
         }
         if (controller.signal.aborted) {
           agentSteps = failRunningAgentSteps(agentSteps);
-          updateAssistantMessage(assistantId, { agentSteps });
+          dispatch({ type: 'turn-cancelled', assistantId, agentSteps });
           toast.info('已停止 AI 回复，已收到的内容已保留');
         } else {
           agentSteps = finishAgentTimeline(agentSteps);
@@ -454,14 +608,16 @@ export function AICreativeAssistantSheet<T>({
           const modelSkillCall = parsed.skillId
             ? assistantSkillRegistry.resolve(parsed.skillId, enabledSkillIds)
             : null;
-          updateAssistantMessage(assistantId, {
+          const completionError = await onComplete?.(parsed.content, parsed.state, assistantId);
+          dispatch({
+            type: 'turn-completed',
+            assistantId,
             content: parsed.content,
+            error: typeof completionError === 'string' ? completionError : undefined,
+            state: parsed.state,
+            skillCalls: modelSkillCall ? [modelSkillCall] : undefined,
             agentSteps,
-            thinking: undefined,
-            ...(parsed.state ? { state: parsed.state } : {}),
-            ...(modelSkillCall ? { skillCalls: [modelSkillCall] } : { skillCalls: undefined }),
           });
-          onComplete?.(parsed.content, parsed.state);
           delete retryRequestsRef.current[assistantId];
           followUpCandidate =
             options.followUpSkills !== false &&
@@ -471,20 +627,29 @@ export function AICreativeAssistantSheet<T>({
       } catch (streamError) {
         if (controller.signal.aborted) {
           agentSteps = failRunningAgentSteps(agentSteps);
-          updateAssistantMessage(assistantId, { agentSteps });
+          dispatch({ type: 'turn-cancelled', assistantId, agentSteps });
           toast.info('已停止 AI 回复，已收到的内容已保留');
         } else {
-          updateAssistantMessage(assistantId, {
-            content: '本次请求未完成。',
-            agentSteps: failRunningAgentSteps(agentSteps),
+          agentSteps = failRunningAgentSteps(agentSteps);
+          const completionError = options.completeOnStreamError
+            ? await onComplete?.('', null, assistantId)
+            : undefined;
+          dispatch({
+            type: 'turn-failed',
+            assistantId,
+            error:
+              typeof completionError === 'string'
+                ? completionError
+                : options.completeOnStreamError && onComplete
+                  ? ''
+                  : formatAssistantError(streamError),
+            content: options.completeOnStreamError && onComplete ? undefined : '本次请求未完成。',
+            agentSteps,
           });
-          setError(formatAssistantError(streamError));
         }
       } finally {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
-          setGenerating(false);
-          setStreamingMessageId((current) => (current === assistantId ? null : current));
         }
         if (followUpCandidate) {
           queueMicrotask(() => generateCandidateRef.current?.());
@@ -504,8 +669,7 @@ export function AICreativeAssistantSheet<T>({
   const removeMessage = (id: string) => {
     if (generating) return;
     delete retryRequestsRef.current[id];
-    setMessages((items) => items.filter((item) => item.id !== id));
-    setError('');
+    dispatch({ type: 'message-removed', messageId: id });
   };
 
   const sendMessage = () => {
@@ -515,7 +679,7 @@ export function AICreativeAssistantSheet<T>({
       ...messages,
       { id: messageId(), role: 'user' as const, content, attachments },
     ];
-    setMessages(nextMessages);
+    dispatch({ type: 'message-added', message: nextMessages[nextMessages.length - 1] });
     setInput('');
     setAttachments([]);
     const selectedThisTurn = selectedSkillIds;
@@ -530,6 +694,10 @@ export function AICreativeAssistantSheet<T>({
       .join('\n');
     setSelectedSkillIds([]);
     setSkillMenuOpen(false);
+    const shouldGenerateImage = Boolean(onGenerateImage && isImageGenerationRequest(content));
+    const latestGeneratedImage = [...messages]
+      .reverse()
+      .flatMap((message) => message.generatedImages ?? [])[0];
     void runStream(
       buildRequestMessages(
         catalogInstruction
@@ -537,17 +705,37 @@ export function AICreativeAssistantSheet<T>({
           : '请先根据项目上下文和当前对话澄清需求，提出必要问题或给出可执行建议。正文不要输出 JSON；按系统约定追加状态标记，也不要声称已经回填表单。',
         nextMessages
       ),
-      undefined,
+      shouldGenerateImage
+        ? async (assistantContent, _state, assistantId) => {
+            try {
+              const generated = await onGenerateImage!(content, latestGeneratedImage);
+              updateAssistantMessage(assistantId, {
+                content: assistantContent || '参考图已生成，可继续描述需要调整的内容。',
+                generatedImages: [generated],
+              });
+              dispatch({ type: 'error-cleared' });
+            } catch (generationError) {
+              const errorMessage =
+                generationError instanceof Error
+                  ? generationError.message
+                  : '图片生成失败，请稍后重试';
+              updateAssistantMessage(assistantId, {
+                content: assistantContent || '图片生成未完成，请检查图片服务配置后重试。',
+              });
+              return errorMessage;
+            }
+          }
+        : undefined,
       undefined,
       {
         initialSkillIds: selectedThisTurn,
+        completeOnStreamError: shouldGenerateImage,
       }
     );
   };
 
   const generateCandidate = () => {
-    setCandidate(null);
-    setCandidateRaw(null);
+    dispatch({ type: 'candidate-cleared' });
     void runStream(
       buildRequestMessages(
         `基于已确认的需求生成可回填到“${targetLabel}”的最终候选稿。严格遵守以下输出约束，不要解释：\n${candidateInstructions}`,
@@ -555,21 +743,25 @@ export function AICreativeAssistantSheet<T>({
         false
       ),
       (raw) => {
-        setCandidateRaw(raw);
+        dispatch({ type: 'candidate-raw', raw });
         try {
           const value = parseCandidate(raw);
-          setCandidate({ raw, value });
+          dispatch({ type: 'candidate-parsed', raw, value });
+          agentRef.current?.createCandidate(raw);
           if (autoPreviewCandidate) {
             onApply(value);
             toast.success(`${targetLabel}已回填到左侧草稿，确认保存后才会写入已确认角色`);
           }
         } catch (parseError) {
-          setCandidate(null);
-          setError(
+          const message =
             parseError instanceof Error
               ? parseError.message
-              : '候选稿格式无效，请继续澄清或重新生成'
-          );
+              : '候选稿格式无效，请继续澄清或重新生成';
+          return /JSON at position|Unexpected token|Unexpected end|Expected ','|Expected ']'/i.test(
+            message
+          )
+            ? '候选稿 JSON 不完整或被截断。请复制后继续澄清，或重新生成。'
+            : message;
         }
       },
       undefined,
@@ -606,7 +798,7 @@ export function AICreativeAssistantSheet<T>({
       );
       setAttachments((items) => [...items, ...nextAttachments]);
     } catch (readError) {
-      setError(formatAssistantError(readError));
+      dispatch({ type: 'error-set', error: formatAssistantError(readError) });
     }
   };
 
@@ -622,14 +814,25 @@ export function AICreativeAssistantSheet<T>({
 
   const persistCandidate = () => {
     if (!onPersist) return;
-    void Promise.resolve(onPersist()).then(() => {
+    if (agentRef.current) {
+      void agentRef.current.persistCandidate().then((result) => {
+        if (result.status === 'saved') toast.success(`${targetLabel} saved`);
+      });
+      return;
+    }
+    void Promise.resolve(onPersist()).then((saved) => {
+      if (saved === false) return;
       toast.success(`${targetLabel}已保存`);
     });
   };
 
   const applyCandidate = () => {
     if (!candidate) return;
-    onApply(candidate.value);
+    if (agentRef.current) {
+      void agentRef.current.applyCandidate();
+    } else {
+      onApply(candidate.value);
+    }
     setConfirmOpen(false);
     setOpen(false);
     toast.success(`${targetLabel}已填充到表单，请继续检查并保存`);
@@ -643,43 +846,36 @@ export function AICreativeAssistantSheet<T>({
       isCreativeAssistantStateApplied(message.state, memory)
     )
       return;
-    setMemory((current) => mergeCreativeAssistantMemory(current, message.state!));
-    setMessages((items) =>
-      items.map((item) => (item.id === message.id ? { ...item, stateSaved: true } : item))
-    );
+    dispatch({
+      type: 'memory-updated',
+      memory: mergeCreativeAssistantMemory(memory, message.state!),
+    });
+    void agentRef.current?.saveMemory(message.state!);
+    dispatch({ type: 'message-state-saved', messageId: message.id });
     toast.success('本轮确认内容已保存到当前项目记忆');
   };
 
   const clearProjectMemory = () => {
     clearCreativeAssistantMemory(projectId);
-    setMemory({ ...EMPTY_CREATIVE_ASSISTANT_MEMORY });
-    setMessages((items) => items.map(({ stateSaved: _stateSaved, ...item }) => item));
+    dispatch({ type: 'project-memory-cleared' });
     toast.success('当前项目记忆已清除');
   };
 
   const startNewConversation = () => {
     stopGeneration();
-    setMessages([]);
+    dispatch({ type: 'conversation-cleared' });
     setAttachments([]);
     setInput('');
-    setCandidate(null);
-    setCandidateRaw(null);
-    setError('');
     retryRequestsRef.current = {};
-    setConversationVersion((version) => version + 1);
   };
 
   const clearConversation = () => {
     stopGeneration();
-    setMessages([]);
+    dispatch({ type: 'conversation-cleared' });
     setAttachments([]);
     setInput('');
-    setCandidate(null);
-    setCandidateRaw(null);
-    setError('');
     retryRequestsRef.current = {};
     skipNextInitializationRef.current = true;
-    setConversationVersion((version) => version + 1);
   };
 
   useEffect(() => {
@@ -769,7 +965,10 @@ export function AICreativeAssistantSheet<T>({
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
           side="right"
-          className="flex h-dvh w-full flex-col border-slate-800 bg-slate-950 p-0 text-slate-100 sm:max-w-md"
+          className={cn(
+            'flex h-dvh w-full flex-col border-slate-800 p-0 sm:max-w-md',
+            ASSISTANT_CHAT_SURFACE.panel
+          )}
         >
           <SheetHeader className="space-y-2 border-b border-slate-800 px-5 py-4 pr-14 text-left">
             <div className="flex items-start justify-between gap-3">
@@ -811,9 +1010,12 @@ export function AICreativeAssistantSheet<T>({
           <ScrollArea className="min-h-0 flex-1 px-4 py-4">
             <div className="space-y-3 pr-3" aria-live="polite">
               {projectId && (
-                <div className="space-y-2 rounded-lg border border-indigo-400/20 bg-indigo-500/5 p-3 text-xs text-slate-300">
+                <div
+                  data-testid="creative-assistant-memory-panel"
+                  className={ASSISTANT_CHAT_SURFACE.memory}
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 font-medium text-indigo-200">
+                    <div className="flex items-center gap-2 font-medium !text-white">
                       <BookOpen className="h-4 w-4" />
                       项目记忆
                     </div>
@@ -837,26 +1039,17 @@ export function AICreativeAssistantSheet<T>({
                   {memory.confirmedFacts.length > 0 ||
                   memory.constraints.length > 0 ||
                   memory.glossary.length > 0 ? (
-                    <div className="space-y-1 text-slate-400">
-                      {memory.intent && <p>意图：{memory.intent}</p>}
-                      {memory.confirmedFacts.slice(0, 3).map((fact) => (
-                        <p key={fact}>已确认：{fact}</p>
-                      ))}
-                      {memory.constraints.slice(0, 2).map((constraint) => (
-                        <p key={constraint}>约束：{constraint}</p>
-                      ))}
-                      {memory.glossary.slice(0, 2).map((entry) => (
-                        <p key={entry.term}>
-                          术语：{entry.term}：{entry.meaning}
-                        </p>
-                      ))}
+                    <div className="space-y-2">
+                      <AssistantInfoCard tone="embedded" rows={rowsFromMemorySummary(memory)} />
                       {memory.confirmedFacts.length +
                         memory.constraints.length +
                         memory.glossary.length >
-                        7 && <p className="text-slate-500">其余记忆会继续随请求携带。</p>}
+                        7 && (
+                        <p className={ASSISTANT_CHAT_SURFACE.muted}>其余记忆会继续随请求携带。</p>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-slate-500">
+                    <p className={ASSISTANT_CHAT_SURFACE.muted}>
                       暂无已确认记忆。保存本轮识别内容后，新对话会自动携带。
                     </p>
                   )}
@@ -868,19 +1061,7 @@ export function AICreativeAssistantSheet<T>({
                 </p>
               )}
               {messages.map((message) => (
-                <div
-                  key={message.id}
-                  data-testid={
-                    message.role === 'user'
-                      ? 'creative-assistant-user-message'
-                      : 'creative-assistant-assistant-message'
-                  }
-                  className={
-                    message.role === 'user'
-                      ? 'ml-8 rounded-lg border border-indigo-200 bg-white p-3 text-sm text-slate-900'
-                      : 'mr-5 rounded-lg border border-slate-600 bg-slate-800 p-3 text-sm text-white'
-                  }
-                >
+                <AssistantChatBubble key={message.id} role={message.role}>
                   <div className="mb-1 flex justify-end gap-1">
                     {message.role === 'assistant' &&
                       retryRequestsRef.current[message.id] &&
@@ -922,7 +1103,7 @@ export function AICreativeAssistantSheet<T>({
                     />
                   ) : null}
                   {message.skillCalls?.length ? (
-                    <div className="mb-2 space-y-1 text-xs text-slate-400">
+                    <div className={cn('mb-2 space-y-1 text-xs', ASSISTANT_CHAT_SURFACE.muted)}>
                       {message.skillCalls.map((call, index) => (
                         <p key={`${message.id}-skill-${call.id}-${index}`}>
                           技能 {assistantSkillRegistry.get(call.id)?.label ?? call.id}
@@ -966,51 +1147,58 @@ export function AICreativeAssistantSheet<T>({
                       ))}
                     </div>
                   ) : null}
-                  {message.role === 'assistant' && message.state && (
-                    <div className="mt-3 space-y-2 rounded border border-amber-400/20 bg-amber-500/5 p-2 text-xs text-slate-300">
-                      <p className="font-medium text-amber-200">本轮识别结果（确认后才会记住）</p>
-                      {message.state.intent && <p>意图：{message.state.intent}</p>}
-                      {message.state.confirmedFacts.length > 0 && (
-                        <p>已确认：{message.state.confirmedFacts.join('；')}</p>
-                      )}
-                      {message.state.openQuestions.length > 0 && (
-                        <p>待确认：{message.state.openQuestions.join('；')}</p>
-                      )}
-                      {message.state.glossary.length > 0 && (
-                        <p>
-                          术语：
-                          {message.state.glossary
-                            .map((entry) => `${entry.term}：${entry.meaning}`)
-                            .join('；')}
-                        </p>
-                      )}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={() => saveMessageState(message)}
-                        disabled={
-                          !projectId ||
-                          Boolean(message.stateSaved) ||
-                          isCreativeAssistantStateApplied(message.state, memory)
-                        }
-                      >
-                        {message.stateSaved ||
-                        isCreativeAssistantStateApplied(message.state, memory)
-                          ? '已保存到项目记忆'
-                          : '保存本轮记忆'}
-                      </Button>
-                      {autoPreviewCandidate &&
-                        (message.stateSaved ||
-                          isCreativeAssistantStateApplied(message.state, memory)) && (
-                          <p className="text-[11px] text-slate-500">
-                            项目记忆不会填写左侧角色表单。完整角色（含外观、服饰）请在候选稿区点「保存角色」。
-                          </p>
-                        )}
+                  {message.generatedImages?.length ? (
+                    <div
+                      className="mt-3 space-y-2"
+                      data-testid="creative-assistant-generated-images"
+                    >
+                      {message.generatedImages.map((image) => (
+                        <AssistantGeneratedImage
+                          key={image.id}
+                          image={image}
+                          resolveUrl={resolveGeneratedImageUrl}
+                        />
+                      ))}
                     </div>
+                  ) : null}
+                  {message.role === 'assistant' && message.state && (
+                    <AssistantInfoCard
+                      className="mt-3"
+                      tone="notice"
+                      title="本轮识别结果（确认后才会记住）"
+                      rows={rowsFromAssistantState(message.state)}
+                      footer={
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => saveMessageState(message)}
+                            disabled={
+                              !projectId ||
+                              Boolean(message.stateSaved) ||
+                              isCreativeAssistantStateApplied(message.state, memory)
+                            }
+                          >
+                            {message.stateSaved ||
+                            isCreativeAssistantStateApplied(message.state, memory)
+                              ? '已保存到项目记忆'
+                              : '保存本轮记忆'}
+                          </Button>
+                          {autoPreviewCandidate &&
+                            (message.stateSaved ||
+                              isCreativeAssistantStateApplied(message.state, memory)) && (
+                              <p className="text-[11px] text-slate-500">
+                                项目记忆不会填写左侧表单。完整角色与剧情大纲请在候选稿区点「
+                                {persistLabel}」。
+                              </p>
+                            )}
+                        </>
+                      }
+                    />
                   )}
-                </div>
+                </AssistantChatBubble>
               ))}
               {error && (
                 <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
@@ -1027,10 +1215,10 @@ export function AICreativeAssistantSheet<T>({
                           : '可回填候选稿'
                         : '候选稿原文'}
                     </p>
-                    <p className="text-xs text-slate-200">
+                    <p className={cn('text-xs', ASSISTANT_CHAT_SURFACE.inkOnDark.value)}>
                       {candidate
                         ? autoPreviewCandidate
-                          ? '请检查左侧表单的外观与服饰，点击保存后才会写入已确认角色。保存项目记忆不会填写角色表单。'
+                          ? `请检查左侧回填的角色和剧情大纲，点击「${persistLabel}」后才会写入项目。保存项目记忆不会填写表单。`
                           : '确认前不会修改原表单。'
                         : '格式暂时无法解析，可复制后手动填写或继续澄清。'}
                     </p>
