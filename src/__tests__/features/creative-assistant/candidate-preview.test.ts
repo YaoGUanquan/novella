@@ -85,6 +85,22 @@ describe('buildCandidatePreview', () => {
     expect(clothing).not.toContain('"label":"名称"');
   });
 
+  it('labels a planning outline for review before save', () => {
+    const nodes = buildCandidatePreview({
+      outline: '牛来用十万本金开始炒股。',
+      characters: [{ name: '牛来', role: 'protagonist' }],
+    });
+    expect(nodes).toEqual(
+      expect.arrayContaining([
+        { kind: 'field', label: '剧情大纲', value: '牛来用十万本金开始炒股。' },
+        expect.objectContaining({
+          kind: 'group',
+          label: '角色',
+        }),
+      ])
+    );
+  });
+
   it('leaves non-json strings as readable content', () => {
     expect(coerceCandidateValue('先看草稿')).toBe('先看草稿');
     expect(buildCandidatePreview('先看草稿')).toEqual([

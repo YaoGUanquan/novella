@@ -1,4 +1,7 @@
-import { parseCharacterDrafts } from '@/pages/project-edit/components/parse-character-drafts';
+import {
+  parseCharacterDrafts,
+  parsePlanningDrafts,
+} from '@/pages/project-edit/components/parse-character-drafts';
 
 describe('parseCharacterDrafts', () => {
   it('keeps appearance and clothing on a complete character draft', () => {
@@ -70,5 +73,57 @@ describe('parseCharacterDrafts', () => {
     expect(characters[0].name).toBe('牛来');
     expect(characters[0].appearance).toBeUndefined();
     expect(characters[0].clothing).toBeUndefined();
+  });
+});
+
+describe('parsePlanningDrafts', () => {
+  it('backfills an outline generated from the character, not just the character list', () => {
+    const draft = parsePlanningDrafts(
+      JSON.stringify({
+        outline: '牛来在央企驻场加班，婚后贷款压力下从十万本金开始炒股。',
+        characters: [{ name: '牛来', role: 'protagonist' }],
+      })
+    );
+
+    expect(draft.outline).toBe('牛来在央企驻场加班，婚后贷款压力下从十万本金开始炒股。');
+    expect(draft.characters[0].name).toBe('牛来');
+  });
+
+  it('still accepts a legacy character array without throwing', () => {
+    const draft = parsePlanningDrafts('[{"name":"牛来","role":"main"}]');
+    expect(draft.characters[0].name).toBe('牛来');
+    expect(draft.outline).toBe('');
+  });
+
+  it('accepts an outline-only draft so the user can save it back like a character', () => {
+    const draft = parsePlanningDrafts(
+      JSON.stringify({ outline: '职场工具人在股市里寻找翻身的幻觉。' })
+    );
+    expect(draft.characters).toEqual([]);
+    expect(draft.outline).toBe('职场工具人在股市里寻找翻身的幻觉。');
+  });
+
+  it('recovers the outline and complete characters when later JSON is truncated', () => {
+    const truncated = [
+      '{',
+      '  "outline": "牛来在周一早晨打开证券APP。",',
+      '  "characters": [',
+      '    { "name": "牛来", "role": "main", "description": "央企员工" },',
+      '    { "name": "英工", "role": "mentor", "description": "领导" },',
+      '    { "name": "钱老", "role": "mentor", "appearance": { "eyeColor": "#d3a5a',
+    ].join('\n');
+
+    const draft = parsePlanningDrafts(truncated);
+    expect(draft.outline).toBe('牛来在周一早晨打开证券APP。');
+    expect(draft.characters.map((character) => character.name)).toEqual(['牛来', '英工']);
+  });
+
+  it('throws a Chinese message instead of a raw JSON syntax error', () => {
+    expect(() => parsePlanningDrafts('{ "outline": ')).toThrow(/不完整|截断|尚未包含|可用/);
+    try {
+      parsePlanningDrafts('{ "outline": ');
+    } catch (error) {
+      expect((error as Error).message).not.toMatch(/Expected|position \d+/i);
+    }
   });
 });

@@ -23,6 +23,9 @@ function expandThinkingTraces() {
 describe('AICreativeAssistantSheet', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (aiService.streamConfiguredDialogue as jest.Mock)
+      .mockReset()
+      .mockImplementation(() => chunks(''));
     localStorage.clear();
     delete (aiService as { streamConfiguredDialogueEvents?: unknown })
       .streamConfiguredDialogueEvents;
@@ -64,7 +67,14 @@ describe('AICreativeAssistantSheet', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
-    expect(await screen.findByText('我已理解项目背景，请补充主角的核心动机。')).toBeInTheDocument();
+    const assistantIntro = await screen.findByText('我已理解项目背景，请补充主角的核心动机。');
+    expect(assistantIntro).toBeInTheDocument();
+    expect(
+      assistantIntro.closest('[data-testid="creative-assistant-assistant-message"]')?.className
+    ).toMatch(/!bg-slate-800/);
+    expect(
+      assistantIntro.closest('[data-testid="creative-assistant-assistant-message"]')?.className
+    ).toMatch(/!text-white/);
     fireEvent.change(screen.getByLabelText('AI 对话输入'), {
       target: { value: '我想突出他的孤傲感' },
     });
@@ -305,9 +315,12 @@ describe('AICreativeAssistantSheet', () => {
 
     fireEvent.click(saveButton);
 
-    await waitFor(() =>
-      expect(screen.getAllByText('已确认：主角是抱丹宗师').length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getAllByText('主角是抱丹宗师').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('已确认').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('creative-assistant-memory-panel').className).toMatch(
+      /!bg-slate-800/
     );
+    expect(screen.getByTestId('creative-assistant-memory-panel').className).toMatch(/!text-white/);
     expect(
       JSON.parse(
         window.localStorage.getItem('novella_creative_assistant_memory_v1:prj-memory') ?? '{}'
@@ -371,8 +384,35 @@ describe('AICreativeAssistantSheet', () => {
     expect(await screen.findByText('我理解当前目标。')).toBeInTheDocument();
     expect(screen.getByText('为了避免歧义，请先确认主角姓名。')).toBeInTheDocument();
     expect(screen.queryByText(/novella-state/i)).not.toBeInTheDocument();
-    expect(screen.getByText('已确认：项目名称是股海浮沉')).toBeInTheDocument();
+    expect(screen.getByText('已确认')).toBeInTheDocument();
+    expect(screen.getByText('项目名称是股海浮沉')).toBeInTheDocument();
+    expect(screen.queryByText(/已确认：项目名称是股海浮沉/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存本轮记忆' })).toBeInTheDocument();
+  });
+
+  it('renders confirmed facts as individual info rows instead of a jammed paragraph', async () => {
+    (aiService.streamConfiguredDialogue as jest.Mock).mockImplementation(() =>
+      chunks(
+        '我理解当前目标。<novella-state>{"intent":"完善角色","target":"角色设定","constraints":[],"confirmedFacts":["项目名是股海浮沉","主角牛来是大学刚毕业的金融新兵"],"openQuestions":[],"glossary":[]}</novella-state>'
+      )
+    );
+
+    render(
+      <AICreativeAssistantSheet
+        projectId="prj-info-layout"
+        targetLabel="角色设定"
+        projectContext="项目正文"
+        candidateInstructions="返回角色设定正文"
+        parseCandidate={(raw) => raw}
+        onApply={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
+    expect(await screen.findByText('项目名是股海浮沉')).toBeInTheDocument();
+    expect(screen.getByText('主角牛来是大学刚毕业的金融新兵')).toBeInTheDocument();
+    expect(screen.queryByText(/项目名是股海浮沉；主角牛来/)).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('creative-assistant-info-card').length).toBeGreaterThan(0);
   });
 
   it('renders assistant markdown instead of raw markers', async () => {
@@ -713,5 +753,155 @@ describe('AICreativeAssistantSheet', () => {
     const assistantMessages = screen.getAllByTestId('creative-assistant-assistant-message');
     expect(assistantMessages[assistantMessages.length - 1].textContent).not.toContain('\\"name\\"');
     expect(assistantMessages[assistantMessages.length - 1].textContent).not.toContain('"name"');
+  });
+
+  it('generates and renders an image inside an assistant reply for an explicit image request', async () => {
+    const onGenerateImage = jest.fn().mockResolvedValue({
+      id: 'generated-image-1',
+      prompt: '牛来角色参考图',
+      previewUrl: 'https://cdn.example/niu.png',
+      relativePath: 'assets/images/niu.png',
+      mimeType: 'image/png',
+      size: 256,
+      createdAt: '2026-08-23T00:00:00.000Z',
+    });
+    (aiService.streamConfiguredDialogue as jest.Mock)
+      .mockImplementationOnce(() => chunks('我已理解项目背景。'))
+      .mockImplementationOnce(() => chunks('正在按角色设定生成参考图。'));
+
+    render(
+      <AICreativeAssistantSheet
+        projectId="prj-generated-image"
+        targetLabel="角色设定"
+        projectContext="已确认角色：牛来"
+        candidateInstructions="返回角色设定正文"
+        parseCandidate={(raw) => raw}
+        onApply={jest.fn()}
+        onGenerateImage={onGenerateImage}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
+    expect(await screen.findByText('我已理解项目背景。')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('AI 对话输入'), {
+      target: { value: '生成一张牛来的参考图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+
+    const image = await screen.findByRole('img', { name: 'AI 生成图片：牛来角色参考图' });
+    expect(image).toHaveAttribute('src', 'https://cdn.example/niu.png');
+    expect(screen.getByText('assets/images/niu.png')).toBeInTheDocument();
+    expect(onGenerateImage).toHaveBeenCalledWith('生成一张牛来的参考图', undefined);
+  });
+
+  it('adds an image generated from the role card to the same assistant session', async () => {
+    (aiService.streamConfiguredDialogue as jest.Mock).mockImplementationOnce(() =>
+      chunks('我已读取当前项目。')
+    );
+    render(
+      <AICreativeAssistantSheet
+        projectId="prj-role-card-image"
+        targetLabel="角色设定"
+        projectContext="已确认角色：牛来"
+        candidateInstructions="返回角色设定正文"
+        parseCandidate={(raw) => raw}
+        onApply={jest.fn()}
+        generatedImageEvents={[
+          {
+            id: 'role-card-image-1',
+            prompt: '牛来角色立绘，电影感参考图',
+            previewUrl: 'https://cdn.example/niu-card.png',
+            relativePath: 'assets/images/niu-card.png',
+            createdAt: '2026-08-23T00:00:00.000Z',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
+    expect(
+      await screen.findByRole('img', { name: 'AI 生成图片：牛来角色立绘，电影感参考图' })
+    ).toHaveAttribute('src', 'https://cdn.example/niu-card.png');
+    expect(screen.getByText('牛来角色立绘，电影感参考图')).toBeInTheDocument();
+    expect(screen.getByText('assets/images/niu-card.png')).toBeInTheDocument();
+  });
+
+  it('shows a path error without rendering an empty image source', async () => {
+    render(
+      <AICreativeAssistantSheet
+        projectId="prj-missing-image-path"
+        targetLabel="角色设定"
+        projectContext="已确认角色：牛来"
+        candidateInstructions="返回角色设定正文"
+        parseCandidate={(raw) => raw}
+        onApply={jest.fn()}
+        generatedImageEvents={[
+          {
+            id: 'missing-image-path',
+            prompt: '牛来角色参考图',
+            previewUrl: '',
+            relativePath: 'assets/images/missing.png',
+            createdAt: '2026-08-23T00:00:00.000Z',
+          },
+        ]}
+        resolveGeneratedImageUrl={() => ''}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
+    expect(await screen.findByText('图片加载失败，请检查项目工作目录')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: 'AI 生成图片：牛来角色参考图' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('assets/images/missing.png')).toBeInTheDocument();
+  });
+
+  it('still generates an image when the dialogue stream fails', async () => {
+    const onGenerateImage = jest.fn().mockResolvedValue({
+      id: 'generated-without-dialogue',
+      prompt: '牛来参考图',
+      previewUrl: 'https://cdn.example/fallback.png',
+      relativePath: 'assets/images/fallback.png',
+      createdAt: '2026-08-23T00:00:00.000Z',
+    });
+    (aiService.streamConfiguredDialogue as jest.Mock)
+      .mockReset()
+      .mockImplementation((requestMessages: Array<{ role: string; content: string }>) => {
+        const requestedImage = requestMessages.some((message) =>
+          message.content.includes('生成牛来的参考图')
+        );
+        if (!requestedImage) return chunks('我已理解项目背景。');
+        return (async function* () {
+          yield* [];
+          throw new ConfiguredDialogueError({
+            kind: 'transport',
+            endpoint: 'https://dialogue.example/v1',
+          });
+        })();
+      });
+
+    render(
+      <AICreativeAssistantSheet
+        projectId="prj-image-fallback"
+        targetLabel="角色设定"
+        projectContext="已确认角色：牛来"
+        candidateInstructions="返回角色设定正文"
+        parseCandidate={(raw) => raw}
+        onApply={jest.fn()}
+        onGenerateImage={onGenerateImage}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开角色设定 AI 助手' }));
+    expect(await screen.findByText('我已理解项目背景。')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('AI 对话输入'), {
+      target: { value: '生成牛来的参考图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    expect(await screen.findByRole('img', { name: 'AI 生成图片：牛来参考图' })).toHaveAttribute(
+      'src',
+      'https://cdn.example/fallback.png'
+    );
+    expect(screen.queryByText(/无法连接到 dialogue\.example/)).not.toBeInTheDocument();
   });
 });

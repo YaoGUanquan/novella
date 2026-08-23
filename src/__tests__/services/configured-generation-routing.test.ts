@@ -15,21 +15,20 @@ describe('configured image and video facade routing', () => {
       model: 'image-custom',
       enabled: true,
     });
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ data: [{ url: 'https://cdn.example/image.png' }] }),
-      });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [{ url: 'https://cdn.example/image.png' }] }),
+    });
     global.fetch = fetchMock as typeof fetch;
 
     const result = await generateImage('a storyboard frame', { maxRetries: 0 });
     expect(result.url).toBe('https://cdn.example/image.png');
     expect(fetchMock.mock.calls[0][0]).toBe('https://image.example/v1/images/generations');
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)).model).toBe(
-      'image-custom'
-    );
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      model: 'image-custom',
+      size: '1024x1024',
+    });
   });
 
   it('routes video generation through the enabled remote gateway', async () => {
@@ -41,17 +40,15 @@ describe('configured image and video facade routing', () => {
       timeoutMs: 10000,
       modelMap: {},
     });
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          id: 'remote-task',
-          status: 'completed',
-          url: 'https://cdn.example/video.mp4',
-        }),
-      });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'remote-task',
+        status: 'completed',
+        url: 'https://cdn.example/video.mp4',
+      }),
+    });
     global.fetch = fetchMock as typeof fetch;
 
     const result = await generateVideo('a camera move', { maxRetries: 0 });
