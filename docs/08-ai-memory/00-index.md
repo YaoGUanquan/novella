@@ -17,7 +17,7 @@
 - `05-decision-log.md`：长期有效的决策。
 - `06-agent-maintenance-rules.md`：AI 读取和更新记忆的规则。
 - `07-project-creation-ai-context.md`：新建工程 AI 灵感、元信息和上下文传递契约。
-- `08-creative-assistant.md`：侧栏创作助手、技能分层、角色回填与展示合同。
+- `08-creative-assistant.md`：侧栏创作助手、技能分层、角色回填、生成图片资产与展示合同。
 - `99-prompt-template.md`：初始化或维护记忆库的提示词模板。
 
 ## 维护规则
@@ -26,12 +26,15 @@
 
 ## 当前基线
 
-- 基线日期：2026-08-22
+- 基线日期：2026-08-23
 - 分支：`develop`
 - 代码扫描报告：`docs/03-analysis/codebase-scan-2026-08-22.md`
 - 架构图谱：`docs/03-analysis/architecture-graph.md`
 - 外部开发者文档对照：`docs/03-analysis/external-developer-docs-2026-08-22.md`
 - 记忆注册表：`docs/08-ai-memory/00-registry.json`
-- 最近完成记录：`docs/ae/work-reports/2026-08-22-daily-report.md`
+- 最近完成记录：`docs/00-process/active/generated-image-assets-and-assistant-editing-2026-08-23/progress.md`
+- 当前 AE 宪章：`docs/ae/constitution.md`
+- 最近交付门禁：`docs/ae/gates/20260823T101011Z-work-final.json`
+- 最近经验：`docs/ae/experience/generated-image-assets-and-project-state-races-2026-08-23.md`
 - 创作助手开发说明：`docs/developer-guide/creative-assistant.md`
 - 服务连接说明：`docs/developer-guide/service-connections.md`

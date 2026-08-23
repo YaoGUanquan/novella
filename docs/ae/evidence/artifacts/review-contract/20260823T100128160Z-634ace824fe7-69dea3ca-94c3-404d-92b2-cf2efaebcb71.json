@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "20260823T100128160Z-634ace824fe7-69dea3ca-94c3-404d-92b2-cf2efaebcb71",
+  "evidenceKind": "review-contract",
+  "payload": {
+    "kind": "code",
+    "mode": "report-only",
+    "reviewers": [
+      "correctness-reviewer",
+      "testing-reviewer",
+      "standards-reviewer",
+      "maintainability-reviewer",
+      "coherence-reviewer",
+      "feasibility-reviewer",
+      "evidence-reviewer"
+    ],
+    "targetCoverage": {
+      "code": {
+        "status": "covered",
+        "reviewers": ["correctness-reviewer", "testing-reviewer", "maintainability-reviewer"]
+      },
+      "document": {
+        "status": "covered",
+        "reviewers": ["coherence-reviewer", "feasibility-reviewer", "evidence-reviewer"]
+      }
+    },
+    "inputs": {
+      "kind": "code",
+      "mode": "report-only",
+      "targets": "code,document",
+      "write-evidence": true
+    }
+  },
+  "timestamps": {
+    "writtenAt": "2026-08-23T10:01:28.166Z"
+  },
+  "git": {
+    "available": true,
+    "head": "9c9cc7fbd09b5c6285a7d586511af8e60d801b4d",
+    "branch": "develop",
+    "statusHash": "178f9988f17d19096b8cffa1ea6713cc8a415ff0588a4efd6f85ce79eb875d2f",
+    "dirty": true
+  },
+  "hashes": {
+    "previousRecordHash": "92f9d044e7ee107c77676f03d1fad2db6bff35f6f69b873193235c7e4fb94e7e",
+    "payloadHash": "634ace824fe74da479248c908787b53119f2662d0fbeed3ea3598b6db83ba43e",
+    "recordHash": "668522b9d96dac31184ccac072e1ae0af7c1769ceb2127c657872438f1499638"
+  }
+}

@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "status": "ok",
+  "mode": "shallow-dependency-graph",
+  "root": "src/features/creative-assistant",
+  "generatedAt": "2026-08-23T09:50:50.022Z",
+  "nodeCount": 17,
+  "edgeCount": 37,
+  "nodes": [
+    { "path": "agent-timeline.ts", "kind": "source", "module": "agent-timeline.ts" },
+    {
+      "path": "assistant-chat-surface.ts",
+      "kind": "source",
+      "module": "assistant-chat-surface.ts"
+    },
+    { "path": "assistant-info-layout.ts", "kind": "source", "module": "assistant-info-layout.ts" },
+    { "path": "assistant-markdown.ts", "kind": "source", "module": "assistant-markdown.ts" },
+    { "path": "candidate-preview.ts", "kind": "source", "module": "candidate-preview.ts" },
+    { "path": "components/AgentThinkingTrace.tsx", "kind": "source", "module": "components" },
+    { "path": "components/AICreativeAssistantSheet.tsx", "kind": "source", "module": "components" },
+    { "path": "components/AssistantChatBubble.tsx", "kind": "source", "module": "components" },
+    { "path": "components/AssistantInfoCard.tsx", "kind": "source", "module": "components" },
+    { "path": "components/AssistantMarkdown.tsx", "kind": "source", "module": "components" },
+    { "path": "components/CandidatePreview.tsx", "kind": "source", "module": "components" },
+    {
+      "path": "creative-assistant-memory.ts",
+      "kind": "source",
+      "module": "creative-assistant-memory.ts"
+    },
+    {
+      "path": "creative-assistant-session.ts",
+      "kind": "source",
+      "module": "creative-assistant-session.ts"
+    },
+    {
+      "path": "creative-assistant-ui-reducer.ts",
+      "kind": "source",
+      "module": "creative-assistant-ui-reducer.ts"
+    },
+    {
+      "path": "image-generation-intent.ts",
+      "kind": "source",
+      "module": "image-generation-intent.ts"
+    },
+    { "path": "index.ts", "kind": "source", "module": "index.ts" },
+    { "path": "types.ts", "kind": "source", "module": "types.ts" }
+  ],
+  "edges": [
+    {
+      "from": "agent-timeline.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "assistant-info-layout.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AgentThinkingTrace.tsx",
+      "to": "agent-timeline.ts",
+      "type": "imports",
+      "specifier": "../agent-timeline",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AgentThinkingTrace.tsx",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "../types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "agent-timeline.ts",
+      "type": "imports",
+      "specifier": "../agent-timeline",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "../assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "assistant-info-layout.ts",
+      "type": "imports",
+      "specifier": "../assistant-info-layout",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "candidate-preview.ts",
+      "type": "imports",
+      "specifier": "../candidate-preview",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "image-generation-intent.ts",
+      "type": "imports",
+      "specifier": "../image-generation-intent",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "components/AssistantChatBubble.tsx",
+      "type": "imports",
+      "specifier": "./AssistantChatBubble",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "creative-assistant-memory.ts",
+      "type": "imports",
+      "specifier": "../creative-assistant-memory",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "creative-assistant-session.ts",
+      "type": "imports",
+      "specifier": "../creative-assistant-session",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "../types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "components/AgentThinkingTrace.tsx",
+      "type": "imports",
+      "specifier": "./AgentThinkingTrace",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "components/AssistantInfoCard.tsx",
+      "type": "imports",
+      "specifier": "./AssistantInfoCard",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "components/AssistantMarkdown.tsx",
+      "type": "imports",
+      "specifier": "./AssistantMarkdown",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "components/CandidatePreview.tsx",
+      "type": "imports",
+      "specifier": "./CandidatePreview",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "to": "creative-assistant-ui-reducer.ts",
+      "type": "imports",
+      "specifier": "../creative-assistant-ui-reducer",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantChatBubble.tsx",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "../assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantInfoCard.tsx",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "../assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantInfoCard.tsx",
+      "to": "assistant-info-layout.ts",
+      "type": "imports",
+      "specifier": "../assistant-info-layout",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantMarkdown.tsx",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "../assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantMarkdown.tsx",
+      "to": "assistant-info-layout.ts",
+      "type": "imports",
+      "specifier": "../assistant-info-layout",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantMarkdown.tsx",
+      "to": "assistant-markdown.ts",
+      "type": "imports",
+      "specifier": "../assistant-markdown",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/AssistantMarkdown.tsx",
+      "to": "components/AssistantInfoCard.tsx",
+      "type": "imports",
+      "specifier": "./AssistantInfoCard",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/CandidatePreview.tsx",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "../assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/CandidatePreview.tsx",
+      "to": "assistant-info-layout.ts",
+      "type": "imports",
+      "specifier": "../assistant-info-layout",
+      "provenance": "inferred"
+    },
+    {
+      "from": "components/CandidatePreview.tsx",
+      "to": "candidate-preview.ts",
+      "type": "imports",
+      "specifier": "../candidate-preview",
+      "provenance": "inferred"
+    },
+    {
+      "from": "creative-assistant-memory.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "creative-assistant-session.ts",
+      "to": "agent-timeline.ts",
+      "type": "imports",
+      "specifier": "./agent-timeline",
+      "provenance": "inferred"
+    },
+    {
+      "from": "creative-assistant-session.ts",
+      "to": "creative-assistant-memory.ts",
+      "type": "imports",
+      "specifier": "./creative-assistant-memory",
+      "provenance": "inferred"
+    },
+    {
+      "from": "creative-assistant-session.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "creative-assistant-ui-reducer.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    },
+    {
+      "from": "index.ts",
+      "to": "assistant-chat-surface.ts",
+      "type": "imports",
+      "specifier": "./assistant-chat-surface",
+      "provenance": "inferred"
+    },
+    {
+      "from": "index.ts",
+      "to": "components/AICreativeAssistantSheet.tsx",
+      "type": "imports",
+      "specifier": "./components/AICreativeAssistantSheet",
+      "provenance": "inferred"
+    },
+    {
+      "from": "index.ts",
+      "to": "components/AssistantChatBubble.tsx",
+      "type": "imports",
+      "specifier": "./components/AssistantChatBubble",
+      "provenance": "inferred"
+    },
+    {
+      "from": "index.ts",
+      "to": "types.ts",
+      "type": "imports",
+      "specifier": "./types",
+      "provenance": "inferred"
+    }
+  ],
+  "externalDependencies": [
+    { "from": "components/AgentThinkingTrace.tsx", "dependency": "lucide-react" },
+    { "from": "components/AgentThinkingTrace.tsx", "dependency": "react" },
+    { "from": "components/AgentThinkingTrace.tsx", "dependency": "@/shared/utils/class-names" },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "lucide-react" },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "react" },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/components/ui/scroll-area"
+    },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "@/components/ui/sheet" },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "@/components/ui/toast" },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/core/ai/dialogue-stream-events"
+    },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "@/core/ai/types/ai-core" },
+    { "from": "components/AICreativeAssistantSheet.tsx", "dependency": "@/core/services" },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/core/services/ai/assistant-agent"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/core/services/ai/assistant-skills"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/core/services/ai/text/ai-service"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/shared/components/ui/button"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/shared/components/ui/confirm-dialog"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/shared/components/ui/textarea"
+    },
+    {
+      "from": "components/AICreativeAssistantSheet.tsx",
+      "dependency": "@/shared/utils/class-names"
+    },
+    { "from": "components/AssistantChatBubble.tsx", "dependency": "react" },
+    { "from": "components/AssistantChatBubble.tsx", "dependency": "@/shared/utils/class-names" },
+    { "from": "components/AssistantInfoCard.tsx", "dependency": "react" },
+    { "from": "components/AssistantInfoCard.tsx", "dependency": "@/shared/utils/class-names" },
+    { "from": "components/AssistantMarkdown.tsx", "dependency": "react" },
+    { "from": "components/CandidatePreview.tsx", "dependency": "react" },
+    { "from": "components/CandidatePreview.tsx", "dependency": "@/shared/utils/class-names" },
+    { "from": "creative-assistant-memory.ts", "dependency": "@/core/services/ai/assistant-skills" },
+    {
+      "from": "creative-assistant-ui-reducer.ts",
+      "dependency": "@/core/services/ai/assistant-skills"
+    },
+    { "from": "types.ts", "dependency": "@/core/services/ai/assistant-skills" }
+  ],
+  "freshness": {
+    "status": "fresh-at-generation",
+    "canUseAsEvidence": true,
+    "fingerprint": "63f72b64ef679b4ffab3beaa09fed1d19ba324156e6dbea8fb9664a3240f8f2e",
+    "basis": ["current filesystem scan completed during this command"],
+    "git": {
+      "available": true,
+      "head": "9c9cc7fbd09b5c6285a7d586511af8e60d801b4d",
+      "branch": "develop",
+      "statusHash": "178f9988f17d19096b8cffa1ea6713cc8a415ff0588a4efd6f85ce79eb875d2f",
+      "dirty": true
+    }
+  },
+  "limits": {
+    "files": {
+      "requested": 10000,
+      "effective": 10000,
+      "eligible": 17,
+      "returned": 17,
+      "truncated": false
+    },
+    "edges": { "requested": 10000, "effective": 10000, "returned": 37, "truncated": false }
+  },
+  "limitations": [
+    "static shallow scan only",
+    "relative imports are resolved; path aliases remain external dependencies",
+    "dynamic imports, generated code, aliases, and framework-specific resolution may be incomplete"
+  ]
+}

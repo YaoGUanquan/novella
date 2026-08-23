@@ -72,6 +72,8 @@ frontend -> infrastructure/tauri-bridge -> Tauri commands -> Rust services -> cr
 - `tsconfig.json` 当前 `strict: false`，不要把“编译通过”误认为类型安全；公共接口、外部响应和持久化数据仍需显式校验。
 - React 使用函数式组件和 Hooks；`core/**` 不得引入 React Hooks 或 UI 状态。
 - Zustand store 放在 `src/shared/stores`，按领域拆分；页面临时状态使用局部 state 或 Context selector。
+- 同一 feature 内由异步事件共同驱动的消息、活动轮次、错误、候选稿、记忆和重置状态，应优先放入 feature 自有的纯 reducer；不要把展示状态塞进 `core` Agent，也不要用多个独立 setter 复制同一终态转换。
+- reducer 必须保持同步、不可变和无副作用。网络、持久化、`AbortController`、DOM、滚动、文件选择器与弹窗仍由 React 集成层管理；异步终态必须携带稳定 turn ID，旧轮次不得结束或覆盖较新的活动轮次。
 - `index.ts` 只做导出，不放业务逻辑。
 - 使用仓库已有的 `cn()`、logger、`ServiceError`、`generate*Id` 等工具，不重复创建平行实现。
 - 目录和普通 `.ts` 文件使用 `kebab-case`；React 组件 `.tsx` 使用 `PascalCase`，`index.tsx` 除外；类型/类/接口使用 `PascalCase`；变量/函数使用 `camelCase`；常量和枚举成员使用 `UPPER_CASE`。
@@ -98,6 +100,8 @@ feature -> image-generation-service -> provider adapter -> remote task -> asset/
 ```
 
 - 复用 `src/core/services/ai/image/image-generation/` 的 types、adapter、provider 和错误处理模式。
+- 桌面端生成图片必须先解析供应商 JSON/SSE/Data URL 结果，再通过受校验的 Tauri 命令落盘到 `<workingDir>/<projectId>/assets/images/`；项目 JSON 只保存 `assets/images/...` 相对路径，不持久化供应商临时 URL、Data URL 或 Blob URL。
+- 本地图片预览必须通过限定项目资产根的 IPC 读取；校验工作目录、项目 ID、固定 `assets/images/` 前缀、文件大小和图片魔数。不得为任意工作目录开放宽泛 asset protocol。
 - 对异步视频任务明确提交、查询、取消、轮询、超时、下载、失败和幂等行为。
 - 远程 URL 不是永久本地资产；下载时校验响应、文件类型、大小、路径和清理策略。
 - 真实服务测试需要脱敏测试凭据和明确授权；默认使用 mock/contract 测试。
@@ -126,6 +130,8 @@ feature -> image-generation-service -> provider adapter -> remote task -> asset/
 - 前端领域服务优先使用 `ServiceError` 和统一错误码；边界层把底层错误映射为可观察的用户状态。
 - 日志记录 request id、provider、step、耗时和错误类别时必须脱敏；不记录 API key、Bearer token、完整 prompt 中的敏感数据或远程凭据。
 - 持久化数据、checkpoint 和资产元数据需要版本兼容策略；变更字段时补迁移/兼容读取测试。
+- 编辑既有项目时，路由 `projectId` 是保存身份的首要来源；不得因内存项目缺少 ID 而生成新 UUID。加载器不得采用 ID 与路由不匹配的 `currentProject`，异步磁盘快照也不得覆盖本地已修改的角色或资产引用。
+- 助手会话持久化图片消息时只保存可恢复的相对路径和必要元数据，清除派生 `previewUrl`；重载后再经受控资产读取恢复预览。
 
 ## 文档与 AI 记忆
 

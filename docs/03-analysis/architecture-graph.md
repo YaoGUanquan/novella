@@ -65,10 +65,14 @@ flowchart LR
 flowchart TD
   Steps[角色 / 脚本 / 分镜 / 详情]
   Sheet[AICreativeAssistantSheet]
+  Reducer[feature pure UI reducer]
+  Agent[CreativeAssistantAgent]
   Skills[assistant-skills 产品技能 + AE 适配]
   Events[streamConfiguredDialogueEvents]
   Web[Provider / Vite 开发代理]
   Native[Tauri dialogue.rs HTTPS SSE]
+  Effects[React effects: session / memory persistence]
+  Abort[AbortController / DOM / dialogs]
   Timeline[思考过程编排步骤]
   Memory[项目记忆 需确认]
   Parse[parseCharacterDrafts]
@@ -76,19 +80,45 @@ flowchart TD
   Draft[左侧待确认草稿表单]
   Persist[保存角色]
 
-  Steps --> Sheet --> Skills
-  Sheet --> Events
+  Steps --> Sheet
+  Sheet --> Reducer
+  Sheet --> Agent --> Skills
+  Agent --> Events
   Events --> Web
   Events --> Native
-  Events --> Timeline
-  Sheet --> Memory
+  Events --> Sheet --> Timeline
+  Reducer --> Effects
+  Sheet --> Abort
+  Reducer --> Memory
   Sheet --> Parse --> Preview
   Parse --> Draft
   Preview --> Persist
   Draft --> Persist
 ```
 
-边界说明：角色解析成功即预览回填；保存角色才写已确认列表。脚本/分镜默认仍走填充确认弹窗。字符串化 JSON 不得作为聊天气泡主视图。
+边界说明：Agent 负责 UI-free 领域编排；feature reducer 负责消息、活动 turn、错误、候选、记忆和 reset 的确定性转换；React 组件保留网络、取消、DOM、弹窗与持久化副作用。终态按 turn ID 防止旧请求清除新请求。角色解析成功即预览回填；保存角色才写已确认列表。
+
+## 生成参考图、项目资产与预览图
+
+```mermaid
+flowchart LR
+  Entry[StepCharacter 生成按钮 / 助手图片意图]
+  Generate[image-generation-service]
+  Configured[configured-image-service]
+  NativeGenerate[Tauri generate_configured_image]
+  Provider[图片 Provider JSON / SSE / Base64]
+  Download[Tauri download_image_asset]
+  File[workingDir/projectId/assets/images/*]
+  Relative[Character + AssistantMessage: assets/images/...]
+  Read[Tauri read_image_asset]
+  Blob[运行时 Blob URL]
+  Views[角色卡 + AI 助手消息]
+
+  Entry --> Generate --> Configured --> NativeGenerate --> Provider
+  Provider --> Download --> File --> Relative --> Read --> Blob --> Views
+```
+
+边界说明：供应商 URL/Data URL 和 Blob URL 都是临时派生值；桌面项目只持久化相对路径。Rust 下载/读取边界校验工作目录、项目 ID、固定 `assets/images/` 前缀、大小和图片魔数。保存以路由项目 ID 为准；加载不得跨项目 fallback 或让陈旧磁盘快照覆盖本地角色资产。
 
 ## AI 请求图
 
@@ -120,6 +150,7 @@ flowchart TD
   Store[ai-connection-settings / secureStorage]
   Dialogue[configured dialogue]
   ImageCfg[configured-image-service]
+  ImageAsset[项目 assets/images 相对资产]
   VideoCfg[remote-video-service]
   LegacyImg[Seedream / Kling / Vidu 回退]
   PublicURL[仅公网 http(s) 素材]
@@ -129,6 +160,7 @@ flowchart TD
   Store --> ImageCfg
   Store --> VideoCfg
   ImageCfg -->|无图片 Key| LegacyImg
+  ImageCfg --> ImageAsset
   VideoCfg --> PublicURL
 ```
 
@@ -198,4 +230,4 @@ graph TD
 
 ## 图谱边界
 
-这是基于 `git ls-files`、配置、导出入口和调用点的静态关系图。完整 import 图需要安装依赖并执行 `pnpm exec madge` 或 dependency-cruiser；本次没有把未执行的工具结果伪装成已验证事实。
+这是基于源码、配置、导出入口和调用点的静态关系图。2026-08-23 使用 `ae-graph-build --root src/features/creative-assistant --limit 10000 --edge-limit 10000` 扫描 17 个 feature 文件和 37 条浅层相对 import，确认 Sheet 导入 reducer、session/memory、展示组件与类型。路径别名、动态 import 和框架解析仍可能缺失；完整依赖约束以 ESLint/dependency-cruiser 和实际构建为准。

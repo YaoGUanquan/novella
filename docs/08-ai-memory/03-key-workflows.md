@@ -35,9 +35,10 @@
 ## 创作助手对话、技能与角色回填
 
 - 使用场景：用户在角色设定、脚本或分镜打开侧栏助手，澄清后生成可回填草稿。
-- 步骤：打开 Sheet -> 可选点选 AE 适配技能 -> SSE 对话（思考过程展示编排步骤）-> 生成候选稿 -> 角色路径自动预览表单 -> 对话内「保存角色」才写入已确认角色；脚本/分镜走填充确认弹窗。项目记忆另点保存。
-- 验证：`corepack pnpm test -- src/__tests__/features/creative-assistant src/__tests__/features/character-consistency src/__tests__/pages/parse-character-drafts.test.ts src/__tests__/services/assistant-skills.test.ts`
-- 风险：模型可能只聊天不吐 JSON，或把 JSON 包成字符串；顶层外观字段必须合并进 `appearance`，否则身高/体型/特征对不上下拉或文本框。
+- 步骤：打开 Sheet -> hydrate reducer -> 可选点选 AE 适配技能 -> Agent/SSE 对话（思考过程展示编排步骤）-> reducer 按 turn ID 更新流式/终态 -> 生成候选稿 -> 角色路径自动预览表单 -> 对话内「保存角色」才写入已确认角色；脚本/分镜走填充确认弹窗。项目记忆另点保存。
+- 状态边界：reducer 管 messages/generating/streaming ID/error/candidate/memory/reset；组件管 input/attachments/menu/dialog/DOM/AbortController/持久化 effect。
+- 验证：`pnpm test -- --runInBand src/__tests__/features/creative-assistant`、`pnpm exec tsc --noEmit`、目标 ESLint、`pnpm build`、现有项目编辑页浏览器 smoke。
+- 风险：模型可能只聊天不吐 JSON，或把 JSON 包成字符串；顶层外观字段必须合并进 `appearance`。异步完成回调必须在 reducer 解除 generating 前结束，旧 turn 终态必须被 ID guard 丢弃。
 
 ## 新建工程 AI 灵感与上下文
 
@@ -52,3 +53,11 @@
 - 步骤：设置页只收集 URL / Key / 模型 -> `loadServiceConnection` / `loadRemoteVideoGatewaySettings` -> 对话走 configured SSE；图片有 Key 则 OpenAI 兼容 `/images/generations`，否则回退旧 provider；视频启用后走 remote-video-service，并阻断非公网素材。
 - 验证：`src/__tests__/services/ai-connection-settings.test.ts`、`configured-generation-routing.test.ts`、`remote-video-service.test.ts`。
 - 风险：默认 vendor URL 只是代码占位，不能当成已确认合作；真实生成需单独授权。
+
+## 生成图片落盘、项目引用与助手回传
+
+- 使用场景：角色页点击生成参考图，或用户在角色步骤的 AI 助手中要求生成/调整参考图。
+- 步骤：识别明确图片意图 -> `generateImage` -> `configured-image-service` -> 桌面端 `generate_configured_image` 解析 JSON/SSE/Base64 -> `download_image_asset` 写入 `<workingDir>/<projectId>/assets/images/` -> 只把 `assets/images/...` 写入角色和助手消息 -> `read_image_asset` 校验并读取 -> 运行时创建 Blob URL 显示。
+- 项目一致性：保存时路由 `projectId` 优先；加载时拒绝 ID 不匹配的 `currentProject`；异步磁盘快照合并不得覆盖本地已修改角色或图片引用。
+- 验证：configured image、意图检测、会话 round-trip、项目保存/加载竞态 Jest；`cargo test --manifest-path src-tauri/Cargo.toml commands::image --lib`；Tauri WebView 角色卡和助手消息可见性。
+- 风险：供应商 SSE 事件可能把 Data URL 放在 `image_url`；仅看 HTTP 200 不足以判断有图片。Data URL MIME 可能错误，必须结合 Base64 解码后的魔数。运行时 Blob URL 不可持久化。

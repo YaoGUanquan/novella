@@ -1,0 +1,17 @@
+{
+  "workflow": "work",
+  "checkpoint": "final",
+  "status": "pass",
+  "worktree": "D:\\codes\\ph-novella",
+  "plan_path": "docs/ae/plans/2026-08-23-generated-image-assets-and-assistant-editing-plan.md",
+  "validation_commands": [
+    "pnpm exec jest --runInBand src/__tests__/features/creative-assistant/AICreativeAssistantSheet.test.tsx src/__tests__/features/creative-assistant/creative-assistant-image-session.test.ts src/__tests__/features/creative-assistant/image-generation-intent.test.ts src/__tests__/pages/generated-image-assets.test.ts src/__tests__/core/services/configured-image-service.test.ts src/__tests__/core/services/image-generation-errors.test.ts; pnpm exec tsc --noEmit; pnpm exec eslint src/features/creative-assistant/components/AICreativeAssistantSheet.tsx src/features/creative-assistant/creative-assistant-session.ts src/features/creative-assistant/image-generation-intent.ts src/features/creative-assistant/types.ts src/pages/project-edit/components/generated-image-assets.ts src/pages/project-edit/components/StepCharacter.tsx src/infrastructure/tauri-bridge/commands.ts src/__tests__/features/creative-assistant/AICreativeAssistantSheet.test.tsx src/__tests__/features/creative-assistant/creative-assistant-image-session.test.ts src/__tests__/features/creative-assistant/image-generation-intent.test.ts src/__tests__/pages/generated-image-assets.test.ts src/__tests__/core/services/configured-image-service.test.ts src/__tests__/core/services/image-generation-errors.test.ts --quiet; cargo test --manifest-path src-tauri/Cargo.toml --lib; pnpm build; git diff --check; browser: http://127.0.0.1:1421 image naturalWidth=448 naturalHeight=720 console errors=0"
+  ],
+  "review_status": "passed",
+  "worktree_decision": "accepted_dirty",
+  "git_operations": [],
+  "blockers": [],
+  "warnings": [],
+  "notes": null,
+  "generated_at": "2026-08-23T07:59:18.622Z"
+}

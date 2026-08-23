@@ -1,0 +1,24 @@
+# Creative Assistant UI Reducer
+
+- Status: complete
+- Requirement source: `docs/ae/prds/2026-08-23-creative-assistant-agent-unification.md`
+- Design source: `docs/ae/designs/creative-assistant-agent-unification-2026-08-23/design.md`
+- Scope: move deterministic assistant presentation transitions from `AICreativeAssistantSheet` into a feature-owned pure reducer; preserve existing UI, persistence formats, provider adapters, and explicit confirmation behavior.
+- Worktree: `develop` is dirty with pre-existing user changes; no reset, checkout, commit, push, or destructive operation will be performed.
+- Consensus gate: requirements confirmed by prior three-round user decisions; reducer boundary fixed by ADR-004; no open product decision; validation requires reducer unit tests, existing creative-assistant tests, TypeScript, ESLint, diff check, code review, and browser smoke when runnable.
+- Web Forge routing: Q1 existing component=yes; Q2 design input=existing visual baseline; Q3 state/persistence=yes, no backend contract change; Q4 preserve visuals. Selected lane: `ae-web-app`, with browser acceptance after state migration.
+- Init: `ae.mjs init --dry-run` reported all managed paths skipped; no initialization writes required.
+- Implementation: added a feature-owned pure reducer for transcript, active turn, error, candidate, memory, hydration/reset, saved-state, and external-image transitions; migrated `AICreativeAssistantSheet` business state to reducer dispatches while retaining local-only controls, refs, abort handling, persistence, and network side effects in the component.
+- Review: scoped correctness/testing/standards/maintainability/reliability review found no blocking issue after adding stale-turn protection and duplicate external-image coverage.
+- Validation: `pnpm exec tsc --noEmit`, direct ESLint for the assistant component/reducer/tests, `pnpm test -- --runInBand src/__tests__/features/creative-assistant` (11 suites, 72 tests), and `git diff --check` passed.
+- Browser smoke: Vite served on `http://127.0.0.1:1422/`; `/project/new` rendered, the role assistant opened, the missing-provider failure state was visible, sending remained disabled with empty input, and browser console warnings/errors were empty. No real provider request was verified.
+- Desktop boundary: user separately started `corepack pnpm tauri dev`; this workflow did not control or inspect that desktop window and made no Tauri IPC or filesystem mutation.
+- Production build: `pnpm build` passed (2719 modules); Vite reported existing dynamic/static import chunking warnings only.
+- Final gate: `APPROVE`, no P0/P1 findings or blockers; proof: `docs/ae/gates/20260823T084619Z-lfg-final.json`.
+- Documentation sync: updated `AGENTS.md`, AE constitution, PRD/design/plan completion state, developer guide, long-term AI memory, reusable experience, and architecture graphs for the Agent / feature reducer / React effects ownership model.
+- Cross-artifact review: corrected stale design/plan coverage labels from R1-R9/NFR1-NFR3/D1-D3 to the implemented R10/NFR4/D4 contract; TC-010 is declared and present in both design mapping tables. No blocking document finding remains.
+- Knowledge registry: replaced unsupported developer-guide/JSON-gate relation targets with allowed Markdown evidence under `docs/ae`; `ae-knowledge-map` and the creative-assistant bidirectional query both return `status: ok`.
+- Graph snapshot: refreshed the bounded `src/features/creative-assistant` shallow scan to 17 nodes / 37 relative-import edges and fingerprint `63f72b64ef679b4ffab3beaa09fed1d19ba324156e6dbea8fb9664a3240f8f2e`; aliases, dynamic imports, generated code, and framework resolution remain outside this graph's proof boundary.
+- Documentation validation: both JSON registries parse, `pnpm docs:check-links` passes (146 Markdown files, 45 links, 41 internal), and `git diff --check` passes with line-ending warnings only.
+- Known unrelated tooling failure: `pnpm docs:check` fails before document inspection because `scripts/check-docs.ts:158` uses CommonJS `__dirname` in ESM scope. This task records the failure but does not change the existing repository script.
+- Documentation final gate: `APPROVE`, no blocking document finding; proof: `docs/ae/gates/20260823T095035Z-lfg-final.json`.

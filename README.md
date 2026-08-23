@@ -24,6 +24,7 @@
 | 脚本 / 角色 / 分镜 | 正文进入可编辑草稿；AI 结果先预览，确认后才写入工程。                                                              |
 | 创作助手           | 各步骤右侧对话。思考过程展示本轮编排步骤，不是供应商思维链。                                                       |
 | 角色回填           | 解析成功的草稿先填左侧「待确认角色」（含外观、服饰）；对话里点「保存角色」才落库。「保存本轮记忆」不会填角色表单。 |
+| 角色参考图         | 角色页或 AI 助手可生成、继续调整参考图；桌面端主动保存为项目相对资产，并在角色卡和对话中显示。                     |
 | 设置               | 三张连接卡：对话、图片、视频。每张只需地址、API Key、模型 ID。                                                     |
 
 写表单、写工程、保存项目记忆都需要用户确认。
@@ -58,6 +59,8 @@ corepack pnpm check
 corepack pnpm test
 ```
 
+Windows 若使用旧版本脚本遇到 ESLint 单引号 glob 被当作文件名，可直接执行 `corepack pnpm exec eslint src --quiet`。当前仓库脚本已改为目录参数，PowerShell 与 Bash 均可运行。
+
 ---
 
 ## 配置模型
@@ -65,10 +68,12 @@ corepack pnpm test
 打开应用「设置」：
 
 1. **对话模型**：剧本、助手、新建灵感。Claude / Anthropic 名称走 Anthropic 协议，其余走 OpenAI 兼容。
-2. **图片生成**：有 Key 时优先请求配置的 `/images/generations`；否则回退 Seedream / Kling / Vidu。
+2. **图片生成**：有 Key 时优先请求配置的 `/images/generations`；兼容常规 JSON、SSE 和 `b64_json` / Data URL 图片结果，包括 Grok Imagine 类响应。未配置时回退已有 Seedream / Kling / Vidu 路径。
 3. **视频生成**：启用且有 Key 时走远程视频服务。素材必须是公网 `http(s)` URL，不能发 `file://`、Blob 或 base64。
 
 密钥走安全存储，不要写进仓库、日志或文档。未配置对话 Key 时，部分流程会使用 Mock，只适合界面预览。
+
+桌面端生成成功后会把图片下载到 `<工作目录>/<projectId>/assets/images/`，项目 JSON 只保存 `assets/images/...` 相对路径。预览通过受校验的 Tauri 图片读取命令恢复为 Blob URL；供应商临时 URL、Data URL 和运行时 Blob URL 都不会作为桌面项目的永久引用。Web/Vite 模式没有本地工作目录能力时仅保留临时预览，不伪造本地相对路径。
 
 Web 开发若遇到 CORS 预检失败，可按 [服务连接](docs/developer-guide/service-connections.md) 开启受限 Vite 代理。生产构建不含该代理。
 
@@ -80,7 +85,8 @@ Web 开发若遇到 CORS 预检失败，可按 [服务连接](docs/developer-gui
 2. 可选技能只改提示词，不会执行外部 `SKILL.md`。澄清、生成草稿、记忆提案始终在后台生效。
 3. 候选稿默认显示中文摘要；原始 JSON 在「查看原文」。
 4. 脚本 / 分镜默认是「填充表单 + 确认弹窗」。角色是预览回填 +「保存角色」。
-5. 失败可重试、删单条或清空当前会话；这些操作不删除已确认的项目记忆。
+5. 在角色步骤可直接说“生成一张参考图”或“把当前参考图改成侧身”；生成结果会同时出现在助手消息和角色参考图区域。
+6. 失败可重试、删单条或清空当前会话；这些操作不删除已确认的项目记忆。
 
 实现入口：`src/features/creative-assistant/`。调用链见 [创作助手](docs/developer-guide/creative-assistant.md)。
 
@@ -93,7 +99,7 @@ src/app、src/pages     入口与页面
 src/features           垂直功能（创作助手、角色、分镜、新建工程）
 src/core               AI Provider、领域服务、Pipeline
 src/infrastructure     Tauri 桥
-src-tauri              桌面命令；对话 SSE 在 commands/dialogue.rs
+src-tauri              桌面命令；对话 SSE 与图片生成/资产读写位于 commands/
 docs/                  用户/开发者指南、AE 方案、AI 记忆库
 ```
 

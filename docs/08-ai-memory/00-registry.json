@@ -21,8 +21,8 @@
       "id": "key-workflows",
       "path": "docs/08-ai-memory/03-key-workflows.md",
       "kind": "memory",
-      "role": "provider and video integration workflows",
-      "topics": ["workflow", "ai-provider", "video-generation"],
+      "role": "provider, generated asset, and video integration workflows",
+      "topics": ["workflow", "ai-provider", "generated-image-assets", "video-generation"],
       "reviewStatus": "current"
     },
     {
@@ -53,8 +53,16 @@
       "id": "creative-assistant",
       "path": "docs/08-ai-memory/08-creative-assistant.md",
       "kind": "memory",
-      "role": "creative assistant sidebar, skills, and character backfill",
-      "topics": ["creative-assistant", "skills", "backfill", "memory"],
+      "role": "creative assistant agent, reducer state, skills, memory, backfill, and generated images",
+      "topics": [
+        "creative-assistant",
+        "agent",
+        "reducer",
+        "skills",
+        "backfill",
+        "memory",
+        "generated-image-assets"
+      ],
       "reviewStatus": "current"
     }
   ],
@@ -106,20 +114,47 @@
     },
     {
       "from": "creative-assistant",
-      "to": "docs/developer-guide/creative-assistant.md",
-      "type": "documents",
+      "to": "docs/ae/experience/creative-assistant-ui-reducer-2026-08-23.md",
+      "type": "records",
       "evidence": {
-        "path": "docs/developer-guide/creative-assistant.md",
-        "note": "Developer-facing call chain and backfill contract for the sidebar assistant."
+        "path": "docs/ae/experience/creative-assistant-ui-reducer-2026-08-23.md",
+        "note": "The reusable experience note records the assistant reducer boundary, stale-turn guard, and validation lessons."
+      }
+    },
+    {
+      "from": "creative-assistant",
+      "to": "docs/ae/experience/generated-image-assets-and-project-state-races-2026-08-23.md",
+      "type": "records",
+      "evidence": {
+        "path": "docs/ae/experience/generated-image-assets-and-project-state-races-2026-08-23.md",
+        "note": "The reusable experience note records Grok SSE/Base64 parsing, canonical project image assets, and project save/load race guards."
+      }
+    },
+    {
+      "from": "creative-assistant",
+      "to": "docs/ae/designs/creative-assistant-agent-unification-2026-08-23/design.md",
+      "type": "implements",
+      "evidence": {
+        "path": "docs/ae/designs/creative-assistant-agent-unification-2026-08-23/design.md",
+        "note": "The implemented design records the Agent, reducer, React effect boundary, and bounded validation evidence."
       }
     },
     {
       "from": "architecture-boundaries",
-      "to": "docs/developer-guide/service-connections.md",
-      "type": "documents",
+      "to": "docs/ae/constitution.md",
+      "type": "governs",
       "evidence": {
-        "path": "docs/developer-guide/service-connections.md",
-        "note": "Three settings surfaces and configured dialogue/image/video routing."
+        "path": "docs/ae/constitution.md",
+        "note": "The constitution makes Agent/reducer/effect ownership and stale-turn evidence reviewable."
+      }
+    },
+    {
+      "from": "architecture-boundaries",
+      "to": "docs/ae/evidence/initial-scan.md",
+      "type": "supports",
+      "evidence": {
+        "path": "docs/ae/evidence/initial-scan.md",
+        "note": "The baseline scan provides repository evidence for provider, service, Tauri, and pipeline boundaries."
       }
     }
   ]
