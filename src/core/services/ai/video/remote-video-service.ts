@@ -1,5 +1,8 @@
 import { loadRemoteVideoGatewaySettings } from '@/core/config/ai-connection-settings';
 
+import { createExecutionContext } from '../capability-registry';
+import type { GenerationExecutionContext } from '../unified-generation-types';
+
 import type { RemoteVideoRequest, RemoteVideoTask } from './remote-video-types';
 
 const isGrok = (model: string) => model.toLowerCase().startsWith('grok-');
@@ -160,52 +163,78 @@ export async function createRemoteVideoTask(request: RemoteVideoRequest): Promis
   if (!settings.enabled) throw new Error('远程视频网关未启用');
   if (!settings.apiKey.trim()) throw new Error('远程视频网关 API Key 未配置');
   const model = settings.modelMap[request.model] || settings.model || request.model;
+  const context = createExecutionContext(
+    {
+      operation: 'video',
+      providerId: 'remote-gateway',
+      modelId: model,
+      version: '1',
+      protocol: isGrok(model) ? 'multipart' : 'json',
+      endpointRef: gatewayUrl(settings.baseUrl, model),
+    },
+    {
+      requestId: `video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timeoutMs: settings.timeoutMs,
+      maxRetries: 0,
+    }
+  );
   const url = gatewayUrl(settings.baseUrl, model);
   if (isGrok(model)) {
     const form = await buildGrokFormData({ ...request, model });
-    return parseTask(
+    return {
+      ...parseTask(
+        await requestGateway(
+          url,
+          { method: 'POST', body: form },
+          settings.timeoutMs,
+          settings.apiKey
+        ),
+        request.model
+      ),
+      context,
+    };
+  }
+  const body = buildVideoGenerationRequest({ ...request, model });
+  return {
+    ...parseTask(
       await requestGateway(
         url,
-        { method: 'POST', body: form },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
         settings.timeoutMs,
         settings.apiKey
       ),
       request.model
-    );
-  }
-  const body = buildVideoGenerationRequest({ ...request, model });
-  return parseTask(
-    await requestGateway(
-      url,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-      settings.timeoutMs,
-      settings.apiKey
     ),
-    request.model
-  );
+    context,
+  };
 }
 
 export async function getRemoteVideoTask(
   request: Pick<RemoteVideoRequest, 'model'>,
-  taskId: string
+  taskId: string,
+  context?: GenerationExecutionContext
 ): Promise<RemoteVideoTask> {
   const settings = await loadRemoteVideoGatewaySettings();
   if (!settings.enabled) throw new Error('远程视频网关未启用');
   if (!settings.apiKey.trim()) throw new Error('远程视频网关 API Key 未配置');
-  const model = settings.modelMap[request.model] || settings.model || request.model;
-  return parseTask(
-    await requestGateway(
-      gatewayUrl(settings.baseUrl, model, taskId),
-      { method: 'GET' },
-      settings.timeoutMs,
-      settings.apiKey
+  const model =
+    context?.modelId ?? settings.modelMap[request.model] ?? settings.model ?? request.model;
+  return {
+    ...parseTask(
+      await requestGateway(
+        gatewayUrl(settings.baseUrl, model, taskId),
+        { method: 'GET' },
+        settings.timeoutMs,
+        settings.apiKey
+      ),
+      request.model
     ),
-    request.model
-  );
+    context,
+  };
 }
 
 export async function generateRemoteVideo(
@@ -224,7 +253,7 @@ export async function generateRemoteVideo(
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError');
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    current = await getRemoteVideoTask(request, created.taskId);
+    current = await getRemoteVideoTask(request, created.taskId, created.context);
     const status = current.status.toLowerCase();
     if (
       current.resultUrl ||

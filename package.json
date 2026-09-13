@@ -34,7 +34,7 @@
     "docs:check-links": "node scripts/docs-check-links.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "madge:circular": "madge --circular --extensions ts,tsx --exclude '^(src/__tests|src/__mocks)' src",
+    "madge:circular": "madge --circular --extensions ts,tsx --exclude \"^(src/__tests|src/__mocks)\" src",
     "knip": "knip --no-progress",
     "jscpd": "jscpd src --pattern '**/*.{ts,tsx}' --min-lines 8 --min-tokens 40 --reporters html,json --output reports/jscpd",
     "quality": "pnpm run madge:circular && pnpm run knip && pnpm run jscpd"

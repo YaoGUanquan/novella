@@ -33,4 +33,6 @@ export interface RemoteVideoTask {
   resultUrl?: string;
   error?: string;
   model: string;
+  context?: GenerationExecutionContext;
 }
+import type { GenerationExecutionContext } from '../unified-generation-types';

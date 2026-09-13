@@ -24,6 +24,7 @@ export { generateWithConfiguredImage } from './configured-image-service';
 import axios from 'axios';
 
 import { loadRemoteVideoGatewaySettings } from '@/core/config/ai-connection-settings';
+import { capabilityRegistry } from '@/core/services/ai/capability-registry';
 import { logger } from '@/core/utils/logger';
 import { retryRequest } from '@/shared/utils';
 
@@ -83,18 +84,15 @@ export async function generateImage(
     }
     const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
 
-    const provider = (() => {
-      switch (model) {
-        case 'seedream-5.0':
-          return generateWithSeedream;
-        case 'kling-1.6':
-          return generateWithKling;
-        case 'vidu-2.0':
-          return generateWithVidu;
-        default:
-          return generateWithSeedream;
-      }
-    })();
+    const registeredModel = ['seedream-5.0', 'kling-1.6', 'vidu-2.0'].includes(model)
+      ? model
+      : 'seedream-5.0';
+    const capability = capabilityRegistry.require(
+      'image',
+      providerForImageModel(registeredModel),
+      registeredModel
+    );
+    const provider = capability.execute as typeof generateWithSeedream;
 
     if (maxRetries <= 0) {
       return await provider(prompt, options);
@@ -181,18 +179,8 @@ export async function generateVideo(
   const model = options.model ?? 'seedance-2.0';
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
 
-  const provider = (() => {
-    switch (model) {
-      case 'seedance-2.0':
-        return generateVideoWithSeedance;
-      case 'kling-1.6':
-        return generateVideoWithKling;
-      case 'vidu-2.0':
-        return generateVideoWithVidu;
-      default:
-        return generateVideoWithSeedance;
-    }
-  })();
+  const capability = capabilityRegistry.require('video', providerForVideoModel(model), model);
+  const provider = capability.execute as typeof generateVideoWithSeedance;
 
   if (maxRetries <= 0) {
     return provider(prompt, options);
@@ -278,5 +266,66 @@ export const imageGenerationService = {
   },
   seedance: generateVideoWithSeedance,
 };
+
+function providerForImageModel(model: string): string {
+  if (model === 'kling-1.6') return 'kling';
+  if (model === 'vidu-2.0') return 'vidu';
+  return 'seedream';
+}
+
+function providerForVideoModel(model: string): string {
+  if (model === 'kling-1.6') return 'kling';
+  if (model === 'vidu-2.0') return 'vidu';
+  return 'seedance';
+}
+
+capabilityRegistry.register({
+  operation: 'image',
+  providerId: 'seedream',
+  modelId: 'seedream-5.0',
+  version: '1',
+  protocol: 'native',
+  execute: generateWithSeedream as (...args: never[]) => Promise<unknown>,
+});
+capabilityRegistry.register({
+  operation: 'image',
+  providerId: 'kling',
+  modelId: 'kling-1.6',
+  version: '1',
+  protocol: 'native',
+  execute: generateWithKling as (...args: never[]) => Promise<unknown>,
+});
+capabilityRegistry.register({
+  operation: 'image',
+  providerId: 'vidu',
+  modelId: 'vidu-2.0',
+  version: '1',
+  protocol: 'native',
+  execute: generateWithVidu as (...args: never[]) => Promise<unknown>,
+});
+capabilityRegistry.register({
+  operation: 'video',
+  providerId: 'seedance',
+  modelId: 'seedance-2.0',
+  version: '1',
+  protocol: 'native',
+  execute: generateVideoWithSeedance as (...args: never[]) => Promise<unknown>,
+});
+capabilityRegistry.register({
+  operation: 'video',
+  providerId: 'kling',
+  modelId: 'kling-1.6',
+  version: '1',
+  protocol: 'native',
+  execute: generateVideoWithKling as (...args: never[]) => Promise<unknown>,
+});
+capabilityRegistry.register({
+  operation: 'video',
+  providerId: 'vidu',
+  modelId: 'vidu-2.0',
+  version: '1',
+  protocol: 'native',
+  execute: generateVideoWithVidu as (...args: never[]) => Promise<unknown>,
+});
 
 export default imageGenerationService;
