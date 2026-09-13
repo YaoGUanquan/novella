@@ -2,7 +2,7 @@ import {
   Plus,
   Wand2,
   FileText,
-  Play,
+  Maximize2,
   Sparkles,
   Clapperboard,
   Users,
@@ -72,7 +72,7 @@ const PIPELINE_STEPS = [
 
 const HeroSection = () => {
   const navigate = useNavigate();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -83,12 +83,8 @@ const HeroSection = () => {
 
   return (
     <div className="space-y-4 mb-6">
-      {/* Gemini 2026 Studio 4K 漫剧 Hero 展台 */}
+      {/* 首页工作流预览 */}
       <div className="studio-card p-5 md:p-7 relative overflow-hidden border border-slate-800/80 bg-[#050810]/90 backdrop-blur-xl rounded-3xl space-y-6 shadow-2xl">
-        {/* 背景高光与青紫色霓虹光晕 */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#00f5d4]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-
         {/* 展台大卡片两栏布局 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           {/* 左侧 & 中间：主视听播放器与 SOP 步骤指示器 */}
@@ -97,23 +93,22 @@ const HeroSection = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-black text-slate-100 tracking-tight flex items-center gap-2">
-                    Novella Gemini AI 漫剧创作车间
+                  <h1 className="text-2xl md:text-3xl font-black text-slate-100 flex flex-wrap items-center gap-2">
+                    Novella AI 漫剧创作车间
                     <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#00f5d4]/10 text-[#00f5d4] border border-[#00f5d4]/30 font-mono font-bold">
-                      Gemini Studio 2026
+                      工作流预览
                     </span>
                   </h1>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    全流程 AI 漫剧 / 动画短剧 Multi-Agent 自动化引擎 · 360 空间记忆与 Consistency
-                    锁脸
+                    从文本设定、角色资源到分镜与视频输出的创作工作台
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex w-full sm:w-auto flex-wrap items-center justify-end gap-2">
                   <Button
                     size="sm"
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-[#00f5d4] hover:bg-[#00e0c2] text-[#050810] text-xs px-4 py-2 rounded-xl border-0 shadow-lg shadow-[#00f5d4]/20 flex items-center gap-1.5 font-bold cursor-pointer"
+                    className="flex-none bg-[#00f5d4] hover:bg-[#00e0c2] text-[#050810] text-xs px-4 py-2 rounded-xl border-0 shadow-lg shadow-[#00f5d4]/20 flex items-center gap-1.5 font-bold cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     新建工程
@@ -121,7 +116,7 @@ const HeroSection = () => {
                   <Button
                     size="sm"
                     onClick={() => navigate('/workflow')}
-                    className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs px-3.5 py-2 rounded-xl cursor-pointer flex items-center gap-1.5 font-semibold"
+                    className="flex-none bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs px-3.5 py-2 rounded-xl cursor-pointer flex items-center gap-1.5 font-semibold"
                   >
                     <Zap className="w-3.5 h-3.5 text-purple-400" />
                     AI 智能体向导
@@ -129,7 +124,7 @@ const HeroSection = () => {
                   <Button
                     size="sm"
                     onClick={() => setIsSampleModalOpen(true)}
-                    className="bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs px-3.5 py-2 rounded-xl cursor-pointer"
+                    className="flex-none bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs px-3.5 py-2 rounded-xl cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5 mr-1" />
                     剧本范例
@@ -174,30 +169,30 @@ const HeroSection = () => {
             {/* 16:9 高清视听 Player */}
             <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black/90 border border-slate-800 group shadow-2xl flex items-center justify-center">
               <img
-                src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&q=80"
-                alt="漫剧 4K 展台"
+                src="/sample-shot-1.jpg"
+                alt="漫剧分镜示例"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
               />
 
-              {/* 播放按钮 Overlay */}
+              {/* 静态分镜预览 */}
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                aria-label="查看分镜示例"
+                title="查看分镜示例"
+                onClick={() => setIsPreviewOpen(true)}
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 rounded-full bg-[#00f5d4]/90 hover:bg-[#00f5d4] text-[#050810] flex items-center justify-center shadow-xl shadow-[#00f5d4]/40 transition-transform hover:scale-110 cursor-pointer border-0 z-20"
               >
-                <Play className="w-6 h-6 fill-current ml-1" />
+                <Maximize2 className="w-6 h-6" />
               </button>
 
               {/* 渲染进度条 Overlay */}
               <div className="absolute bottom-3 left-3 right-3 p-3 rounded-xl bg-slate-950/80 backdrop-blur-md border border-white/10 flex items-center justify-between gap-4 text-xs font-mono">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-[#00f5d4] font-bold animate-pulse">
-                    Auto-Swarm GPU 压制... 85%
-                  </span>
+                  <span className="text-[#00f5d4] font-bold animate-pulse">创作流程预览</span>
                   <div className="flex-1 h-2 rounded-full bg-white/20 overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-[#00f5d4] to-purple-500 w-[85%] transition-all duration-300" />
                   </div>
                 </div>
-                <span className="text-slate-300 text-[11px]">03:12 / 04:50</span>
+                <span className="text-slate-300 text-[11px]">阶段 02 / 04</span>
               </div>
             </div>
           </div>
@@ -208,32 +203,29 @@ const HeroSection = () => {
               <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                 <span className="font-bold text-xs text-slate-100 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-[#00f5d4]" />
-                  Gemini Studio 漫剧引擎
+                  Novella 漫剧引擎
                 </span>
                 <span className="text-[10px] font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30">
-                  Swarm 就绪
+                  工作流就绪
                 </span>
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                Novella 集成 Hub-and-Spoke 多智能体编导调度、3D 运镜矢量、角色 Consistency 锁脸与
-                WebAssembly GPU 4K 压制。
+                统一承载对话、图像、视频和本地媒体处理能力，按项目工作流逐步产出可复用内容。
               </p>
 
               <div className="space-y-2 pt-2 text-xs">
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-400">AI 剧本 Agent</span>
-                  <span className="text-[#00f5d4] font-mono font-bold">DeepSeek-V4 / GPT-5.6</span>
+                  <span className="text-slate-400">文本与剧本</span>
+                  <span className="text-[#00f5d4] font-mono font-bold">可配置 Provider</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-400">角色 Consistency</span>
-                  <span className="text-purple-400 font-mono font-bold">FLUX 4K 锁脸</span>
+                  <span className="text-slate-400">角色与场景资源</span>
+                  <span className="text-purple-400 font-mono font-bold">项目内复用</span>
                 </div>
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-400">TTS 音频对齐</span>
-                  <span className="text-emerald-400 font-mono font-bold">
-                    CosyVoice / ElevenLabs
-                  </span>
+                  <span className="text-slate-400">视频与音频输出</span>
+                  <span className="text-emerald-400 font-mono font-bold">任务可追踪</span>
                 </div>
               </div>
             </div>
@@ -290,6 +282,19 @@ const HeroSection = () => {
 
       {/* 新建工程 Modal */}
       <CreateProjectModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>分镜示例</DialogTitle>
+            <DialogDescription>静态示例画面，非当前工程生成结果。</DialogDescription>
+          </DialogHeader>
+          <img
+            src="/sample-shot-1.jpg"
+            alt="漫剧分镜示例大图"
+            className="w-full aspect-video object-contain"
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

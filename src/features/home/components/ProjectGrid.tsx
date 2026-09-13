@@ -1,31 +1,32 @@
-import {
-  Video,
-  Plus,
-  Edit3,
-  Trash2,
-  Play,
-  ImageIcon,
-  FolderOpen,
-  Search,
-  Filter,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
-import React, { useCallback, memo, useState, useMemo } from 'react';
+import { Plus, Edit3, Trash2, Play, ImageIcon, FolderOpen, Search } from 'lucide-react';
+import React, { useCallback, memo, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import CreateProjectModal from '@/features/project/components/AICreateProjectModal';
 import { Button } from '@/shared/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { toast } from '@/shared/components/ui/toast';
 import { useProjectStore } from '@/shared/stores/project-store';
 import type { ProjectData } from '@/shared/types';
-import { formatDate } from '@/shared/utils/format-ui';
+
+const PROJECT_STATUS_LABELS: Record<NonNullable<ProjectData['status']>, string> = {
+  draft: '草稿',
+  processing: '处理中',
+  completed: '已完成',
+  failed: '处理失败',
+};
 
 interface ProjectGridProps {
   projects: ProjectData[];
   loading: boolean;
-  onRefresh?: () => void;
 }
 
 interface ProjectCardProps {
@@ -42,13 +43,19 @@ const ProjectCard = memo(function ProjectCard({
   onDelete,
 }: ProjectCardProps) {
   return (
-    <div
+    <article
       key={project.id}
-      onClick={() => onView(project.id)}
-      className="studio-card group relative cursor-pointer overflow-hidden p-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] hover:border-indigo-500/50 transition-all duration-300 flex flex-col justify-between space-y-3 shadow-lg hover:shadow-2xl hover:-translate-y-1"
+      aria-label={project.name}
+      className="studio-card group relative min-w-0 overflow-hidden p-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] hover:border-indigo-500/50 transition-[border-color,box-shadow,transform] duration-300 flex flex-col justify-between space-y-3 shadow-lg hover:shadow-2xl motion-safe:hover:-translate-y-1"
     >
       {/* 16:9 视听缩略图预览 */}
       <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center shadow-inner">
+        <button
+          type="button"
+          onClick={() => onView(project.id)}
+          aria-label={`打开工程 ${project.name}`}
+          className="absolute inset-1 z-10 rounded-lg cursor-pointer"
+        />
         {project.thumbnail ? (
           <img
             alt={project.name}
@@ -58,7 +65,7 @@ const ProjectCard = memo(function ProjectCard({
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-[var(--muted-foreground)]">
             <ImageIcon className="w-8 h-8 opacity-40 stroke-1 text-indigo-400" />
-            <span className="text-[10px] font-mono tracking-widest">4K 漫剧画布</span>
+            <span className="text-[10px] font-mono">暂无工程封面</span>
           </div>
         )}
 
@@ -72,11 +79,12 @@ const ProjectCard = memo(function ProjectCard({
         </div>
 
         {/* 快捷悬浮栏 */}
-        <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity duration-200">
           <button
             onClick={(e) => onEdit(project.id, e)}
             className="p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-white hover:bg-indigo-600 transition-colors cursor-pointer"
             title="编辑工程"
+            aria-label={`编辑工程 ${project.name}`}
           >
             <Edit3 className="w-3.5 h-3.5" />
           </button>
@@ -84,6 +92,7 @@ const ProjectCard = memo(function ProjectCard({
             onClick={(e) => onDelete(project.id, e)}
             className="p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-rose-400 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer"
             title="删除工程"
+            aria-label={`删除工程 ${project.name}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -92,27 +101,32 @@ const ProjectCard = memo(function ProjectCard({
 
       {/* 标题、元数据与快捷按钮 */}
       <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <h4 className="font-bold text-sm text-[var(--foreground)] group-hover:text-indigo-400 transition-colors truncate">
-            {project.name}
+        <div className="min-w-0">
+          <h4 className="font-bold text-sm text-[var(--foreground)] group-hover:text-indigo-400 transition-colors">
+            <button
+              type="button"
+              onClick={() => onView(project.id)}
+              className="block w-full truncate text-left cursor-pointer"
+              title={project.name}
+            >
+              {project.name}
+            </button>
           </h4>
-          <span className="text-[10px] font-mono font-bold text-indigo-400">100% 就绪</span>
         </div>
 
         <p className="text-xs text-[var(--muted-foreground)] line-clamp-1">
-          {project.description || '全流程 AI 漫剧工程 · 支持 4K GPU 硬件压制'}
+          {project.description || '暂无工程描述'}
         </p>
 
         {/* 纯中文元数据标签组 */}
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-          <span className="px-2 py-0.5 rounded-md bg-[var(--accent)] border border-[var(--border)] text-[10px] font-mono font-semibold text-[var(--muted-foreground)]">
-            4K 超清
-          </span>
-          <span className="px-2 py-0.5 rounded-md bg-[var(--accent)] border border-[var(--border)] text-[10px] font-mono font-semibold text-[var(--muted-foreground)]">
-            16:9
-          </span>
+          {project.aspectRatio && (
+            <span className="px-2 py-0.5 rounded-md bg-[var(--accent)] border border-[var(--border)] text-[10px] font-mono font-semibold text-[var(--muted-foreground)]">
+              {project.aspectRatio}
+            </span>
+          )}
           <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/30 text-[10px] font-mono font-bold text-indigo-400">
-            {project.status === 'completed' ? '已就绪' : '创作中'}
+            {PROJECT_STATUS_LABELS[project.status] || '未标注状态'}
           </span>
         </div>
 
@@ -138,25 +152,29 @@ const ProjectCard = memo(function ProjectCard({
           </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 });
 
-function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
+function ProjectGrid({ projects, loading }: ProjectGridProps) {
   const navigate = useNavigate();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'processing' | 'completed'>('all');
+  const [pendingDelete, setPendingDelete] = useState<ProjectData | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null);
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const cancelButton = useRef<HTMLButtonElement | null>(null);
 
   const filteredProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return projects.filter((p) => {
       const matchesSearch =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesFilter = activeFilter === 'all' || p.status === activeFilter;
-      return matchesSearch && matchesFilter;
+        p.name.toLowerCase().includes(query) ||
+        (p.description && p.description.toLowerCase().includes(query));
+      return matchesSearch;
     });
-  }, [projects, searchQuery, activeFilter]);
+  }, [projects, searchQuery]);
 
   const handleCreateProject = useCallback(() => {
     setIsCreateModalOpen(true);
@@ -190,19 +208,29 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
   const handleDeleteProject = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      try {
-        const store = useProjectStore.getState();
-        if (typeof store.deleteProject === 'function') {
-          store.deleteProject(id);
-        }
-        toast.success('已成功删除漫剧工程！');
-        onRefresh?.();
-      } catch (err) {
-        console.error('Delete project failed:', err);
-      }
+      const project = projects.find((item) => item.id === id);
+      if (!project) return;
+      deleteTrigger.current = e.currentTarget as HTMLButtonElement;
+      setDeleteError('');
+      setPendingDelete(project);
     },
-    [onRefresh]
+    [projects]
   );
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    try {
+      useProjectStore.getState().deleteProject(pendingDelete.id);
+      if (useProjectStore.getState().projects.some((p) => p.id === pendingDelete.id)) {
+        setDeleteError('工程仍在列表中，请重试。');
+        return;
+      }
+      setPendingDelete(null);
+      toast.success('工程已从当前列表移除');
+    } catch {
+      setDeleteError('无法移除工程，请重试。');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -220,11 +248,13 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full sm:w-auto min-w-0 flex-wrap items-center gap-3">
           {/* 搜索框 */}
-          <div className="relative w-48 sm:w-64">
+          <div className="relative min-w-0 w-full sm:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
             <Input
+              ref={searchInput}
+              aria-label="搜索漫剧工程"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索漫剧工程名称..."
@@ -235,7 +265,7 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
           <Button
             size="sm"
             onClick={handleCreateProject}
-            className="studio-btn-primary px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer rounded-xl border-0 shadow-md shadow-indigo-500/20"
+            className="studio-btn-primary flex-none px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer rounded-xl border-0 shadow-md shadow-indigo-500/20"
           >
             <Plus className="h-4 w-4 stroke-[3]" />
             新建漫剧工程
@@ -245,7 +275,10 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
 
       {/* 漫剧工程网格区 */}
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-[var(--muted-foreground)]">
+        <div
+          role="status"
+          className="flex items-center justify-center py-16 text-[var(--muted-foreground)]"
+        >
           <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-3" />
           正在加载工程列表中...
         </div>
@@ -256,14 +289,19 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
           </div>
           <div className="space-y-1">
             <h4 className="text-lg font-bold text-[var(--foreground)]">
-              {searchQuery ? '未找到匹配的漫剧工程' : '暂无漫剧创作工程'}
+              {searchQuery.trim() ? '未找到匹配的漫剧工程' : '暂无漫剧创作工程'}
             </h4>
             <p className="text-xs text-[var(--muted-foreground)] max-w-md leading-relaxed">
-              {searchQuery
+              {searchQuery.trim()
                 ? '尝试更换搜索关键词，或新建一个漫剧工程。'
                 : '点击下方按钮开启全新的 AI 漫剧工程，导入小说剧本文本即可开始自动化生成。'}
             </p>
           </div>
+          {searchQuery.trim() && (
+            <Button variant="outline" onClick={() => setSearchQuery('')}>
+              清除搜索
+            </Button>
+          )}
           <Button
             size="lg"
             onClick={handleCreateProject}
@@ -286,9 +324,11 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
           ))}
 
           {/* 新建工程 Card */}
-          <div
+          <button
+            type="button"
             onClick={handleCreateProject}
-            className="studio-card group cursor-pointer p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[240px] border border-dashed border-indigo-500/30 hover:border-indigo-500 bg-[var(--card)] hover:bg-[var(--accent)] transition-all rounded-2xl hover:scale-105"
+            aria-label="新建漫剧工程"
+            className="studio-card group cursor-pointer p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[240px] border border-dashed border-indigo-500/30 hover:border-indigo-500 bg-[var(--card)] hover:bg-[var(--accent)] transition-[border-color,background-color,transform] rounded-2xl motion-safe:hover:scale-105"
           >
             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
               <Plus className="w-6 h-6 stroke-[3]" />
@@ -296,12 +336,53 @@ function ProjectGrid({ projects, loading, onRefresh }: ProjectGridProps) {
             <span className="text-xs font-bold text-[var(--foreground)] group-hover:text-indigo-400 transition-colors">
               新建漫剧工程
             </span>
-          </div>
+          </button>
         </div>
       )}
 
       {/* 新建工程 Modal */}
       <CreateProjectModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-[calc(100%-2rem)] sm:max-w-md"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            cancelButton.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            (deleteTrigger.current?.isConnected
+              ? deleteTrigger.current
+              : searchInput.current
+            )?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>移除工程</DialogTitle>
+            <DialogDescription className="break-words">
+              确认将“{pendingDelete?.name}”从工程列表移除？此操作不会删除磁盘中的工程文件。
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p role="alert" className="text-sm text-rose-400">
+              {deleteError}
+            </p>
+          )}
+          <DialogFooter className="gap-2">
+            <Button ref={cancelButton} variant="outline" onClick={() => setPendingDelete(null)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              确认移除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

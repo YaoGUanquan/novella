@@ -404,7 +404,8 @@ html.dark {
   }
 }
 
-html, body {
+html,
+body {
   min-height: 100vh;
   margin: 0;
   padding: 0;
@@ -419,20 +420,22 @@ html, body {
   flex-direction: column;
 }
 
-/* ── Eliminate Tacky Cyan / Blue Focus Rings Globally ── */
-*:focus,
-*:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+/* Keyboard focus stays visible without changing pointer-focus appearance. */
+*:focus {
+  outline: none;
 }
 
-input:focus,
-textarea:focus,
-select:focus,
-button:focus {
-  outline: none !important;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
-  border-color: rgba(99, 102, 241, 0.8) !important;
+*:focus-visible {
+  outline: 2px solid rgba(0, 245, 212, 0.9) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(0, 245, 212, 0.2) !important;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  border-color: rgba(0, 245, 212, 0.8) !important;
 }
 
 ::selection {
@@ -469,6 +472,7 @@ button:focus {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 
   .m-neon-pulse,
@@ -476,6 +480,11 @@ button:focus {
   .m-pulse,
   .m-spin {
     animation: none !important;
+  }
+
+  .studio-card:hover,
+  .studio-btn-primary:hover {
+    transform: none !important;
   }
 }
 
@@ -521,7 +530,7 @@ button:focus {
 /* Ultra-Premium Studio Styling Tokens (Matching the new luxury AI Creative Studio design) */
 .studio-bg-dark {
   background-color: #080c14;
-  background-image: 
+  background-image:
     radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
     radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 40%);
 }
@@ -531,14 +540,22 @@ button:focus {
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    border-color 0.3s,
+    background-color 0.3s,
+    box-shadow 0.3s,
+    transform 0.3s;
 }
 
 .studio-card:hover {
   border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 24px rgba(99, 102, 241, 0.2);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(99, 102, 241, 0.2);
   transform: translateY(-2px);
 }
 
@@ -548,7 +565,11 @@ button:focus {
   border-radius: 14px;
   font-weight: 700;
   box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    background-color 0.25s,
+    color 0.25s,
+    box-shadow 0.25s,
+    transform 0.25s;
 }
 
 .studio-btn-primary:hover {
@@ -558,7 +579,8 @@ button:focus {
 }
 
 /* Light mode luxury crystal overrides & high-contrast text rules */
-html.light, html.light-theme {
+html.light,
+html.light-theme {
   --background: #fafafa;
   --foreground: #09090b;
   --card: #ffffff;
@@ -580,7 +602,9 @@ html.light, html.light-theme {
 html.light .studio-card {
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 html.light .studio-card:hover {
@@ -619,8 +643,8 @@ html.light .border-white\/20 {
 }
 
 /* Light mode dialogs & inputs adapt cleanly */
-html.light [role="dialog"],
-html.light [data-radix-portal] [role="dialog"] {
+html.light [role='dialog'],
+html.light [data-radix-portal] [role='dialog'] {
   background-color: #ffffff !important;
   color: #09090b !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
@@ -633,22 +657,12 @@ html.light select {
   color: #09090b !important;
 }
 
-/* Global Focus Outline & Border Highlight Elimination */
-input, textarea, select, [role="textbox"] {
-  outline: none !important;
+/* Keep text controls aligned with the shared keyboard focus treatment. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role='textbox']:focus-visible {
+  outline: 2px solid rgba(0, 245, 212, 0.9) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(0, 245, 212, 0.2) !important;
 }
-
-input:focus, input:focus-visible, input:focus-within, input:active,
-textarea:focus, textarea:focus-visible, textarea:focus-within, textarea:active,
-select:focus, select:focus-visible, select:active,
-.focus-within\:border-indigo-500:focus-within,
-.focus\:border-indigo-500:focus {
-  outline: none !important;
-  box-shadow: none !important;
-  ring: 0 !important;
-  --tw-ring-color: transparent !important;
-  --tw-ring-shadow: none !important;
-  border-color: var(--border, rgba(255, 255, 255, 0.12)) !important;
-}
-
-
