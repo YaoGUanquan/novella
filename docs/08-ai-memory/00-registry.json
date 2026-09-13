@@ -64,6 +64,14 @@
         "generated-image-assets"
       ],
       "reviewStatus": "current"
+    },
+    {
+      "id": "upstream-sync-assessment",
+      "path": "docs/ae/reports/upstream-novella-sync-assessment-2026-09-13.md",
+      "kind": "assessment",
+      "role": "upstream Novella compatibility and selective integration boundaries",
+      "topics": ["upstream", "plugins", "a2a", "offline-manual", "compatibility"],
+      "reviewStatus": "current"
     }
   ],
   "relations": [
@@ -83,6 +91,15 @@
       "evidence": {
         "path": "docs/ae/graphs/architecture-graph.md",
         "note": "Mermaid graph records the static module and runtime boundaries."
+      }
+    },
+    {
+      "from": "architecture-boundaries",
+      "to": "upstream-sync-assessment",
+      "type": "constrains",
+      "evidence": {
+        "path": "docs/ae/reports/upstream-novella-sync-assessment-2026-09-13.md",
+        "note": "Upstream features are selectively absorbed within current boundaries."
       }
     },
     {

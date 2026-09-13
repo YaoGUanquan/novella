@@ -15,3 +15,40 @@ date: 2026-08-23
 - 本轮已补充设置三连接面与图片/视频配置优先路由图；视频请求只接受公网 URL。
 - Shallow dependency graph：`docs/ae/graphs/graph.json` 记录 2026-08-23 对 `src/features/creative-assistant` 的完整浅层扫描（17 nodes / 37 relative-import edges），fingerprint `63f72b64ef679b4ffab3beaa09fed1d19ba324156e6dbea8fb9664a3240f8f2e`。
 - 图谱限制：未安装依赖时无法声称完整 import 解析；动态 import、生成代码和框架别名可能缺失。
+
+## 2026-09-13 上游同步边界
+
+```mermaid
+flowchart TB
+  Upstream[Agions/novella main] --> Review[静态差异审查]
+  Review --> Plugin[Plugin hooks\n候选方向]
+  Review --> A2A[A2A discovery/message\n协议参考]
+  Review --> Manuals[离线手册\n独立移植候选]
+  Plugin --> LocalCapability[当前 CapabilityRegistry / Provider / Pipeline]
+  A2A --> Security[transport / auth / schema / idempotency]
+  Manuals --> ClaimReview[能力声明与构建依赖审查]
+  LocalBoundary[当前助手 / Tauri / src/shared / AI memory] -.保留.-> Review
+```
+
+- 上游主分支不是当前项目的可直接合并基线。
+- `src/shared -> src/common`、助手/Tauri 删除和项目身份变化被标记为排除项。
+- 此图表达静态评估结果，不证明任何上游运行时能力已进入当前项目。
+- 详细证据：`docs/ae/reports/upstream-novella-sync-assessment-2026-09-13.md`。
+
+## 2026-09-13 统一能力封装补充
+
+```mermaid
+flowchart LR
+  Feature[Feature / Pipeline] --> Service[Domain AI Service]
+  Service --> Registry[CapabilityRegistry\noperation + provider + model]
+  Registry --> Adapter[Provider Adapter / Facade]
+  Adapter --> Endpoint[Third-party Endpoint]
+  Adapter --> Context[GenerationExecutionContext\nrequest/model/protocol frozen]
+  Context --> Poll[Task query/cancel/download]
+  Poll --> Task[GenerationTask / ProviderError]
+```
+
+- `src/core/services/ai/capability-registry.ts` 提供能力注册、查找和执行上下文创建。
+- `src/core/services/ai/unified-generation-types.ts` 定义统一 operation、task、context 和 error 契约。
+- `src/core/services/ai/video/remote-video-service.ts` 在提交时冻结上下文，并在轮询时复用。
+- 2026-09-13 Windows 验证已通过 TypeScript、lint、Jest、Vite build、docs check、Cargo check 和循环依赖检查；Tauri 安装程序运行及真实 Provider 仍未验证。

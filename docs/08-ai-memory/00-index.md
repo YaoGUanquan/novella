@@ -32,6 +32,7 @@
 - 架构图谱：`docs/03-analysis/architecture-graph.md`
 - 外部开发者文档对照：`docs/03-analysis/external-developer-docs-2026-08-22.md`
 - 记忆注册表：`docs/08-ai-memory/00-registry.json`
+- 上游同步评估：`docs/ae/reports/upstream-novella-sync-assessment-2026-09-13.md`
 - 最近完成记录：`docs/00-process/active/generated-image-assets-and-assistant-editing-2026-08-23/progress.md`
 - 当前 AE 宪章：`docs/ae/constitution.md`
 - 最近交付门禁：`docs/ae/gates/20260823T101011Z-work-final.json`

@@ -12,6 +12,20 @@
 - 影响：
 - 何时重新评估：
 
+## 2026-09-13：第三方生成能力使用统一注册表与冻结执行上下文
+
+- 决策：AI、图片和视频接入统一使用 `CapabilityRegistry` 的 `operation + providerId + modelId` 注册键；长任务创建时生成 `GenerationExecutionContext`，后续查询、取消和下载使用创建时的 provider、model、protocol、endpoint、版本、超时和重试上下文。
+- 背景：旧视频服务会按模型名称启发式选择协议和 endpoint，轮询时重新读取设置，存在配置变更导致任务路由漂移的风险。
+- 影响：新增第三方能力优先新增 registry registration、adapter/parser 和 contract tests；旧 facade 保留以兼容现有调用方。远程视频任务已接入上下文冻结，图片和对话的完整迁移仍需后续实施。
+- 何时重新评估：统一 registry 已覆盖全部生成入口，或 provider 配置改为服务端任务快照并由持久化任务系统托管时。
+
+## 2026-09-13：Windows 是 Novella 当前正式构建与验收环境
+
+- 决策：项目当前只在 Windows 本地打包 Tauri 安装程序并执行安装程序验收；Ubuntu 不作为项目构建或发布验收环境。
+- 背景：Windows 环境已完成类型检查、lint、完整 Jest、Vite 构建、文档检查、Rust workspace 检查和循环依赖检查；Ubuntu 缺少 pnpm/Cargo 不代表项目失败。
+- 影响：交付报告必须区分 Windows 本地构建证据、安装程序运行证据、真实 Provider 和生产部署证据；未完成安装程序运行前不得宣称生产验收完成。
+- 何时重新评估：明确增加 Linux 桌面发行版或 CI 多平台发布矩阵时。
+
 ## 2026-08-23：生成图片转为项目相对资产，预览经受控 IPC 恢复
 
 - 决策：桌面端把图片供应商的 JSON/SSE/Base64 结果落盘到 `<workingDir>/<projectId>/assets/images/`，角色和助手会话只保存 `assets/images/...`；预览通过 `read_image_asset` 校验并读取为 Blob URL。保存既有项目以路由 ID 为准，加载器拒绝跨项目 store fallback 和陈旧磁盘快照覆盖。
@@ -207,3 +221,10 @@
 - 背景：用户选择方案 B；当前 SSE 只产出扁平文本，无法展示思考或可见调用。
 - 影响：`streamConfiguredDialogue` 仍只转发 text 分片；助手改走 `streamConfiguredDialogueEvents`。技能标记为 `<novella-skill id="...">`。桌面 chunk 事件增加 `kind`。
 - 重新评估：需要跨会话记住禁用技能、原生 function calling、嵌套子智能体或文件技能包时。
+
+## 2026-09-13：不直接同步上游 Novella 主分支
+
+- 决策：不将 `Agions/novella` 的 `main` 整体 merge 到当前 `develop`；按插件、A2A、离线文档三个能力面分批评估和移植。
+- 背景：上游最新变更包含 `src/shared -> src/common` 大规模迁移、助手和 Tauri 命令删除、项目身份行为变化，以及大量 AE/AI memory 删除，与当前未提交工作和既有边界冲突。
+- 影响：插件 Registry 只吸收设计方向并按当前 CapabilityRegistry 重做；A2A 先做协议与安全设计；离线手册独立移植。当前助手、Provider、Tauri 和项目保存身份不变。
+- 重新评估：上游提供稳定的兼容迁移说明、当前项目完成对应边界迁移，或用户明确要求建立独立同步分支时。

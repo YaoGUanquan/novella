@@ -51,6 +51,7 @@
 
 - 使用场景：用户在设置里保存对话、图片、视频三类连接，创作助手和生成入口读取同一份配置。
 - 步骤：设置页只收集 URL / Key / 模型 -> `loadServiceConnection` / `loadRemoteVideoGatewaySettings` -> 对话走 configured SSE；图片有 Key 则 OpenAI 兼容 `/images/generations`，否则回退旧 provider；视频启用后走 remote-video-service，并阻断非公网素材。
+- 统一能力步骤：先通过 `CapabilityRegistry` 按 `operation/providerId/modelId` 查找能力 -> 创建 `GenerationExecutionContext` -> adapter/facade 执行请求 -> 长任务只使用冻结上下文轮询和下载。未知能力必须明确失败，不得静默回退到其他模型。
 - 验证：`src/__tests__/services/ai-connection-settings.test.ts`、`configured-generation-routing.test.ts`、`remote-video-service.test.ts`。
 - 风险：默认 vendor URL 只是代码占位，不能当成已确认合作；真实生成需单独授权。
 
